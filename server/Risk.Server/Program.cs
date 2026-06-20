@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using Risk.Server.Hubs;
 using Risk.Server.Services;
 
@@ -14,7 +15,7 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -28,9 +29,10 @@ app.UseStaticFiles();
 
 app.MapHub<GameHub>("/gamehub");
 
-app.MapGet("/admin/reset", (GameService game) =>
+app.MapGet("/admin/reset", (GameService game, IHubContext<GameHub> hub) =>
 {
     game.Reset();
+    hub.Clients.All.SendAsync("GameStateUpdated", (object?)null);
     return Results.Ok("Reset");
 });
 

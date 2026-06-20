@@ -14,7 +14,7 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const myTerritories = gameState.territories
     .filter((t) => t.ownerId === myIndex)
-    .sort((a, b) => a.continent.localeCompare(b.continent) || a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const placeArmy = async (territoryId: number) => {
     try {
@@ -25,9 +25,13 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col p-4">
+    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-4">
       <div className="text-center mb-4">
-        <p className="text-sm text-gray-500 uppercase tracking-wider">Initial Placement</p>
+        <div className="flex items-center justify-center">
+          <span className="pb-2 px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider" style={{ backgroundColor: me.colour, color: '#fff' }}>
+            Initial Placement
+          </span>
+        </div>
         {isMyTurn ? (
           <p className="text-lg font-bold text-green-400">Your turn — place an army</p>
         ) : (
@@ -38,20 +42,20 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
         <p className="text-sm text-gray-500 mt-1">{me.reinforcementsRemaining} armies remaining</p>
       </div>
 
-      <ul className="flex-1 overflow-y-auto space-y-1">
+      <ul className="flex-1 grid grid-cols-2 gap-0.5 content-start pb-2">
         {myTerritories.map((t) => (
           <li key={t.id}>
             <button
               onClick={() => placeArmy(t.id)}
               disabled={!isMyTurn}
-              className={`w-full text-left px-4 py-3 rounded-lg flex justify-between items-center
-                ${isMyTurn ? "bg-gray-800 active:bg-gray-700" : "bg-gray-800/50 opacity-50"}`}
+              style={isMyTurn ? { backgroundColor: me.colour + "33" } : {}}
+              className={`w-full text-left px-1.5 py-1 rounded flex justify-between items-center border border-white/10
+                ${isMyTurn ? "active:brightness-125" : "bg-gray-800/50 opacity-50"}`}
             >
-              <div>
-                <span className="font-medium">{t.name}</span>
-                <span className="ml-2 text-xs text-gray-500">{t.continent}</span>
+              <div className="truncate">
+                <span className="font-medium text-xs">{t.name}</span>
               </div>
-              <span className="text-lg font-bold">{t.armies}</span>
+              <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
             </button>
           </li>
         ))}

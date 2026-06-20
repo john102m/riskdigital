@@ -26,4 +26,17 @@ export interface GameState {
   players: Player[];
   territories: Territory[];
   currentPlayerIndex: number;
+  attackFrontIds: number[];
+}
+
+export interface CombatResult {
+  attackerDice: number[];
+  defenderDice: number[];
+  attackerLosses: number;
+  defenderLosses: number;
+  captured: boolean;
+  sourceId: number;
+  targetId: number;
+  sourceArmies: number;
+  targetArmies: number;
 }

@@ -23,6 +23,14 @@ public class GameState
     public List<Player> Players { get; set; } = [];
     public List<Territory> Territories { get; set; } = [];
     public int CurrentPlayerIndex { get; set; }
+    public int? AttackFrontId { get; set; }
+    public List<int> AttackFrontIds { get; set; } = [];
+    public HouseRules HouseRules { get; set; } = new();
+}
+
+public class HouseRules
+{
+    public bool LockedAttackFront { get; set; } = true;
 }
 
 public class Player

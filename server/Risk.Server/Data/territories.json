@@ -43,7 +43,7 @@
     { "id": 32, "name": "India", "continent": "Asia", "adjacent": [28,30,33,35] },
     { "id": 33, "name": "China", "continent": "Asia", "adjacent": [26,27,28,32,34,35] },
     { "id": 34, "name": "Mongolia", "continent": "Asia", "adjacent": [27,31,33,36,37] },
-    { "id": 35, "name": "Southeast Asia", "continent": "Asia", "adjacent": [32,33,38] },
+    { "id": 35, "name": "Siam", "continent": "Asia", "adjacent": [32,33,38] },
     { "id": 36, "name": "Kamchatka", "continent": "Asia", "adjacent": [0,29,31,34,37] },
     { "id": 37, "name": "Japan", "continent": "Asia", "adjacent": [34,36] },
     { "id": 38, "name": "Indonesia", "continent": "Australia", "adjacent": [35,39,40] },

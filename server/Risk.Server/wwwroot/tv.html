@@ -5,29 +5,98 @@
     <title>Risk — TV Debug</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a1a2e; color: #eee; font-family: system-ui, sans-serif; padding: 24px; }
-        h1 { font-size: 24px; margin-bottom: 8px; }
-        .status { color: #888; font-size: 14px; margin-bottom: 24px; }
+        html, body { height: 100%; overflow: hidden; }
+        body { background: #000; color: #eee; font-family: system-ui, sans-serif; display: flex; flex-direction: column; }
+        .header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: #111; flex-shrink: 0; }
+        .header h1 { font-size: 16px; }
+        .status { color: #888; font-size: 12px; }
         .status.connected { color: #38a169; }
-        .game-code { font-size: 48px; font-weight: bold; letter-spacing: 8px; color: #fff; }
-        .phase { font-size: 18px; color: #a0aec0; margin-top: 8px; }
-        .players { margin-top: 24px; }
-        .player { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin: 4px 0; border-radius: 6px; background: #2d2d44; }
-        .player .dot { width: 16px; height: 16px; border-radius: 50%; }
-        .player .name { font-size: 18px; font-weight: 500; }
-        .player .host { font-size: 12px; color: #a0aec0; margin-left: auto; }
-        .no-game { color: #666; font-style: italic; margin-top: 24px; }
+        .game-info { display: flex; gap: 16px; align-items: center; }
+        .game-code { font-size: 20px; font-weight: bold; letter-spacing: 4px; color: #fff; }
+        .phase { font-size: 14px; color: #a0aec0; }
+        .players-bar { display: flex; gap: 12px; padding: 6px 16px; background: #1a1a2e; flex-shrink: 0; }
+        .player-chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; font-size: 13px; }
+        .player-chip.active { outline: 2px solid #fff; }
+        .player-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .map-container { position: relative; flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .map-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .map-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); aspect-ratio: 1365/944; max-width: 100%; max-height: 100%; }
+        .territory { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; font-size: 13px; font-weight: bold; color: #fff; border: 2px solid rgba(0,0,0,0.5); text-shadow: 1px 1px 1px rgba(0,0,0,0.8); cursor: default; }
+        .territory:hover::after { content: attr(data-name); position: absolute; top: -22px; white-space: nowrap; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px; }
+        .t-label { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 8px; white-space: nowrap; color: #fff; text-shadow: 1px 1px 2px #000; margin-top: 1px; }
+        .no-game { color: #666; font-style: italic; padding: 24px; }
     </style>
 </head>
 <body>
-    <h1>🎲 Risk — TV Debug</h1>
-    <div id="status" class="status">Connecting...</div>
-    <div id="content"></div>
+    <div class="header">
+        <h1>🎲 Risk</h1>
+        <div id="status" class="status">Connecting...</div>
+        <div id="game-info" class="game-info"></div>
+    </div>
+    <div id="players-bar" class="players-bar"></div>
+    <div id="content" style="flex:1;display:flex;">
+        <div class="map-container" id="map" style="display:none;">
+            <img src="/risk-board-game-map.jpg" alt="Risk Map" />
+            <div class="map-overlay" id="map-overlay"></div>
+        </div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
     <script>
+        // Territory centre coordinates as percentages [x, y] — index matches territory ID
+        // Based on 2560x1773 image with black borders baked in
+
+        const COORDS_RAW = [
+            [8.1, 15.3],   // 0  Alaska
+            [16.9, 15.8],  // 1  Northwest Territory
+            [35, 10.3],    // 2  Greenland
+            [16, 22.9],    // 3  Alberta
+            [22.3, 25.2],  // 4  Ontario
+            [29, 24.5],    // 5  Quebec
+            [16.5, 33.1],  // 6  Western United States
+            [23.3, 36.1],  // 7  Eastern United States
+            [16, 42.3],    // 8  Central America
+            [23.7, 54.2],  // 9  Venezuela
+            [30.9, 63],  // 10  Brazil
+            [25.9, 67.2],  // 11  Peru
+            [26.4, 75.4],  // 12  Argentina
+            [42.9, 20.3],  // 13  Iceland
+            [49.6, 20.8],  // 14  Scandinavia
+            [42.5, 32.6],  // 15  Great Britain
+            [49.9, 32.3],  // 16  Northern Europe
+            [59.2, 26],  // 17  Ukraine
+            [42.5, 45.7],  // 18  Western Europe
+            [52.4, 41.2],  // 19  Southern Europe
+            [45, 59.4],    // 20  North Africa
+            [53.5, 55.1],  // 21  Egypt
+            [57.7, 64.7],  // 22  East Africa
+            [54.3, 71.3],  // 23  Congo
+            [63.6, 84],    // 24  Madagascar
+            [54.9, 83.4],  // 25  South Africa
+            [68.8, 22.5],  // 26  Ural
+            [74.4, 18.3],  // 27  Siberia
+            [66.9, 35.4],  // 28  Afghanistan
+            [80.8, 13.8],  // 29  Yakutsk
+            [61, 50.9],    // 30  Middle East
+            [80.4, 24.8],  // 31  Irkutsk
+            [72.8, 50.2],  // 32  India
+            [78.1, 42.6],  // 33  China
+            [80.6, 34.6],  // 34  Mongolia
+            [80.3, 54.1],  // 35  Siam
+            [87.8, 13.9],  // 36  Kamchatka
+            [91.1, 35.6],  // 37  Japan
+            [82.2, 69.4],  // 38  Indonesia
+            [90.5, 66.7],  // 39  New Guinea
+            [86.3, 82.9],  // 40  Western Australia
+            [94.8, 83.5],  // 41  Eastern Australia
+        ];
+        const COORDS = COORDS_RAW;
+
         const content = document.getElementById('content');
-        const status = document.getElementById('status');
+        const statusEl = document.getElementById('status');
+        const gameInfo = document.getElementById('game-info');
+        const playersBar = document.getElementById('players-bar');
+        const mapEl = document.getElementById('map');
 
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('/gamehub')
@@ -37,41 +106,70 @@
         connection.on('GameStateUpdated', render);
 
         connection.onreconnecting(() => {
-            status.textContent = 'Reconnecting...';
-            status.className = 'status';
+            statusEl.textContent = 'Reconnecting...';
+            statusEl.className = 'status';
         });
 
         connection.onreconnected(() => {
-            status.textContent = 'Connected';
-            status.className = 'status connected';
+            statusEl.textContent = 'Connected';
+            statusEl.className = 'status connected';
             connection.invoke('GetState');
         });
 
         connection.start().then(() => {
-            status.textContent = 'Connected';
-            status.className = 'status connected';
+            statusEl.textContent = 'Connected';
+            statusEl.className = 'status connected';
             connection.invoke('GetState');
         });
 
         function render(state) {
             if (!state) {
-                content.innerHTML = '<p class="no-game">No game in progress</p>';
+                gameInfo.innerHTML = '';
+                playersBar.innerHTML = '';
+                mapEl.style.display = 'none';
+                document.getElementById('map-overlay').innerHTML = '';
                 return;
             }
 
-            const players = state.players.map(p => `
-                <div class="player">
-                    <span class="dot" style="background:${p.colour}"></span>
-                    <span class="name">${p.name}</span>
-                    ${p.isHost ? '<span class="host">HOST</span>' : ''}
-                </div>
-            `).join('');
-
-            content.innerHTML = `
-                <div class="game-code">${state.gameCode}</div>
-                <div class="phase">${state.phase}${state.phase === 'Playing' ? ' — ' + state.turnPhase : ''}</div>
-                <div class="players">${players}</div>
+            gameInfo.innerHTML = `
+                <span class="game-code">${state.gameCode}</span>
+                <span class="phase">${state.phase}${state.phase === 'Playing' ? ' — ' + state.turnPhase : ''}</span>
             `;
+
+            playersBar.innerHTML = state.players.map((p, i) => {
+                const terrs = state.territories ? state.territories.filter(t => t.ownerId === i) : [];
+                const armies = terrs.reduce((s, t) => s + t.armies, 0);
+                const active = state.currentPlayerIndex === i ? ' active' : '';
+                const info = terrs.length ? ` (${terrs.length}t · ${armies}a${p.reinforcementsRemaining ? ' · ' + p.reinforcementsRemaining + '↓' : ''})` : '';
+                return `<div class="player-chip${active}"><span class="dot" style="background:${p.colour}"></span>${p.name}${info}</div>`;
+            }).join('');
+
+            if (!state.territories || !state.territories.length) {
+                mapEl.style.display = 'none';
+                return;
+            }
+
+            mapEl.style.display = 'flex';
+            // Remove old markers
+            const overlay = document.getElementById('map-overlay');
+            overlay.innerHTML = '';
+
+            // Size overlay to match rendered image
+            const img = mapEl.querySelector('img');
+            overlay.style.width = img.offsetWidth + 'px';
+            overlay.style.height = img.offsetHeight + 'px';
+
+            state.territories.forEach(t => {
+                const [x, y] = COORDS[t.id];
+                const colour = t.ownerId >= 0 ? state.players[t.ownerId].colour : '#666';
+                const div = document.createElement('div');
+                div.className = 'territory';
+                div.style.left = x + '%';
+                div.style.top = y + '%';
+                div.style.background = colour;
+                div.innerHTML = `${t.armies}<span class="t-label">${t.name}</span>`;
+                overlay.appendChild(div);
+            });
         }
     </script>
 </body>

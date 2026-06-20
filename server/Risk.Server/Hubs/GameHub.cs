@@ -36,6 +36,49 @@ public class GameHub : Hub
         await BroadcastState(state);
     }
 
+    public async Task Reinforce(int territoryId)
+    {
+        var state = _game.Reinforce(Context.ConnectionId, territoryId);
+        await BroadcastState(state);
+    }
+
+    public async Task EndReinforce()
+    {
+        var state = _game.EndReinforce(Context.ConnectionId);
+        await BroadcastState(state);
+    }
+
+    public async Task EndAttack()
+    {
+        var state = _game.EndAttack(Context.ConnectionId);
+        await BroadcastState(state);
+    }
+
+    public async Task Attack(int sourceId, int targetId, int diceCount)
+    {
+        var (state, result) = _game.Attack(Context.ConnectionId, sourceId, targetId, diceCount);
+        await Clients.All.SendAsync("CombatResult", result);
+        await BroadcastState(state);
+    }
+
+    public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
+    {
+        var state = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
+        await BroadcastState(state);
+    }
+
+    public async Task EndTurn()
+    {
+        var state = _game.EndTurn(Context.ConnectionId);
+        await BroadcastState(state);
+    }
+
+    public async Task Fortify(int sourceId, int targetId, int armies)
+    {
+        var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        await BroadcastState(state);
+    }
+
     public async Task Rejoin(string playerName)
     {
         _game.Rejoin(playerName, Context.ConnectionId);
