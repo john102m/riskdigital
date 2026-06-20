@@ -61,10 +61,24 @@
 
 ### What's Next
 
-- Playing phase: Reinforce (territory bonus + continent bonus + card trade-ins)
-- Playing phase: Attack (source/target/dice/blitz/move-in)
-- Playing phase: Fortify (one adjacent move per turn)
 - Card system (earn on capture, trade sets for armies)
+- Blitz attack option (auto-repeat until win/threshold)
+- Elimination detection (take cards, check forced trade)
+- Game Over screen
+- UI polish pass
+
+### Bug Fixes (this session)
+
+- Fixed attack front: source territory now always stays in valid front list after capture
+- Fixed adjacency data: Central America↔Venezuela was missing, full audit corrected all 42 territories to match standard Risk rules
+- Fixed move-in minimum: must move at least as many armies as dice used (3 dice = min 3 moved in)
+- Fixed territory name: "Southeast Asia" renamed to "Siam"
+- Fixed move-in stepper showing 0: now reads dice count from combat result directly (timing issue with state)
+- Fixed source picker showing territories with no adjacent enemies (e.g. Argentina surrounded by friendlies)
+
+### Next UI Improvement
+
+- Group territories by continent (alphabetical continents, alphabetical within each) in 2-column layout with continent header blocks — applies to Placement, Reinforce, and Attack source picker
 
 ### Design Notes
 

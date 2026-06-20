@@ -25,6 +25,7 @@ public class GameState
     public int CurrentPlayerIndex { get; set; }
     public int? AttackFrontId { get; set; }
     public List<int> AttackFrontIds { get; set; } = [];
+    public int LastDiceCount { get; set; }
     public HouseRules HouseRules { get; set; } = new();
 }
 

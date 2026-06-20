@@ -8,6 +8,7 @@ server/**/obj/
 # Node
 handset/node_modules/
 handset/dist/
+handset/.vite/
 
 # Unity
 tv/Library/

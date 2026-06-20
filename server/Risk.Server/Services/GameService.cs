@@ -252,6 +252,7 @@ public class GameService
             throw new HubException("Not enough armies to attack with that many dice.");
 
         // Roll dice
+        _state.LastDiceCount = diceCount;
         var attackerDice = RollDice(diceCount).OrderByDescending(d => d).ToArray();
         int defenderDiceCount = target.Armies >= 2 ? 2 : 1;
         var defenderDice = RollDice(defenderDiceCount).OrderByDescending(d => d).ToArray();
@@ -271,6 +272,11 @@ public class GameService
         target.Armies -= defenderLosses;
 
         bool captured = target.Armies <= 0;
+
+        // Set initial front on first attack (must be before adding captured territory)
+        if (_state.HouseRules.LockedAttackFront && _state.AttackFrontIds.Count == 0)
+            _state.AttackFrontIds.Add(sourceId);
+
         if (captured)
         {
             target.OwnerId = _state.CurrentPlayerIndex;
@@ -278,10 +284,6 @@ public class GameService
             if (_state.HouseRules.LockedAttackFront)
                 _state.AttackFrontIds.Add(targetId);
         }
-
-        // Set initial front on first attack
-        if (_state.HouseRules.LockedAttackFront && _state.AttackFrontIds.Count == 0)
-            _state.AttackFrontIds.Add(sourceId);
 
         var result = new CombatResult(
             attackerDice, defenderDice,
@@ -308,8 +310,9 @@ public class GameService
         if (source.OwnerId != _state.CurrentPlayerIndex || target.OwnerId != _state.CurrentPlayerIndex)
             throw new HubException("You must own both territories.");
 
-        if (armies < 1 || armies >= source.Armies)
-            throw new HubException($"Must move between 1 and {source.Armies - 1} armies.");
+        int minMove = _state.LastDiceCount;
+        if (armies < minMove || armies >= source.Armies)
+            throw new HubException($"Must move between {minMove} and {source.Armies - 1} armies.");
 
         source.Armies -= armies;
         target.Armies += armies;
