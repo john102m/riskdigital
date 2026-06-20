@@ -42,7 +42,7 @@ adb connect <fire-stick-ip>:5555
 - **Upgrading to:** HP Z440 workstation (E5-1650 v4, 32GB, NVIDIA K2200) — awaiting setup
 - **TV:** Amazon Fire TV Stick 4K Max (1st Gen, K2R2TE) — or desktop fallback
 - **Handsets:** Any phone with a browser
-- **Server:** Z440 on same WiFi LAN (once set up)
+- **Server:** Z440 on same WiFi LAN (once set up). Production hosting on WHUK (WebHosting UK), serves handset bundle from wwwroot.
 
 ## Docs
 
