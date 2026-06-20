@@ -27,6 +27,7 @@ export interface GameState {
   territories: Territory[];
   currentPlayerIndex: number;
   attackFrontIds: number[];
+  lastDiceCount: number;
 }
 
 export interface CombatResult {

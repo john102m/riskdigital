@@ -26,7 +26,7 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
       setLastResult(result);
       if (result.captured && isMyTurn) {
         setAwaitingMove(true);
-        setMoveArmies(1);
+        setMoveArmies(result.attackerDice.length);
       }
     };
     connection.on("CombatResult", handler);
@@ -37,8 +37,12 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
     .filter((t) => {
       if (t.ownerId !== myIndex || t.armies <= 1) return false;
       if (gameState.attackFrontIds && gameState.attackFrontIds.length > 0)
-        return gameState.attackFrontIds.includes(t.id);
-      return true;
+        if (!gameState.attackFrontIds.includes(t.id)) return false;
+      // Must have at least one adjacent enemy
+      return t.adjacent.some((adjId) => {
+        const adj = gameState.territories.find((x) => x.id === adjId);
+        return adj && adj.ownerId !== myIndex;
+      });
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -104,17 +108,18 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
   // Move-in UI after capture
   if (awaitingMove && sourceId !== null && targetId !== null) {
     const source = gameState.territories.find((t) => t.id === sourceId)!;
+    const minMove = lastResult?.attackerDice.length ?? 1;
     const maxMove = source.armies - 1;
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-green-400">Territory Captured! 🎉</p>
+        <p className="text-lg font-bold text-green-400">Territory Captured!</p>
         <p className="text-sm text-gray-400">Move troops into {gameState.territories.find(t => t.id === targetId)?.name}</p>
         <div className="flex items-center gap-4">
-          <button onClick={() => setMoveArmies(Math.max(1, moveArmies - 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">−</button>
+          <button onClick={() => setMoveArmies(Math.max(minMove, moveArmies - 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">−</button>
           <span className="text-3xl font-bold w-12 text-center">{moveArmies}</span>
           <button onClick={() => setMoveArmies(Math.min(maxMove, moveArmies + 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">+</button>
         </div>
-        <p className="text-xs text-gray-500">Min 1 · Max {maxMove}</p>
+        <p className="text-xs text-gray-500">Min {minMove} · Max {maxMove}</p>
         <button onClick={moveIn} className="bg-green-600 active:bg-green-700 px-6 py-3 rounded-lg text-lg font-bold">
           Move Troops
         </button>
