@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Risk — TV Debug</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; color: #eee; font-family: system-ui, sans-serif; padding: 24px; }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .status { color: #888; font-size: 14px; margin-bottom: 24px; }
+        .status.connected { color: #38a169; }
+        .game-code { font-size: 48px; font-weight: bold; letter-spacing: 8px; color: #fff; }
+        .phase { font-size: 18px; color: #a0aec0; margin-top: 8px; }
+        .players { margin-top: 24px; }
+        .player { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin: 4px 0; border-radius: 6px; background: #2d2d44; }
+        .player .dot { width: 16px; height: 16px; border-radius: 50%; }
+        .player .name { font-size: 18px; font-weight: 500; }
+        .player .host { font-size: 12px; color: #a0aec0; margin-left: auto; }
+        .no-game { color: #666; font-style: italic; margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <h1>🎲 Risk — TV Debug</h1>
+    <div id="status" class="status">Connecting...</div>
+    <div id="content"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <script>
+        const content = document.getElementById('content');
+        const status = document.getElementById('status');
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl('/gamehub')
+            .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000])
+            .build();
+
+        connection.on('GameStateUpdated', render);
+
+        connection.onreconnecting(() => {
+            status.textContent = 'Reconnecting...';
+            status.className = 'status';
+        });
+
+        connection.onreconnected(() => {
+            status.textContent = 'Connected';
+            status.className = 'status connected';
+            connection.invoke('GetState');
+        });
+
+        connection.start().then(() => {
+            status.textContent = 'Connected';
+            status.className = 'status connected';
+            connection.invoke('GetState');
+        });
+
+        function render(state) {
+            if (!state) {
+                content.innerHTML = '<p class="no-game">No game in progress</p>';
+                return;
+            }
+
+            const players = state.players.map(p => `
+                <div class="player">
+                    <span class="dot" style="background:${p.colour}"></span>
+                    <span class="name">${p.name}</span>
+                    ${p.isHost ? '<span class="host">HOST</span>' : ''}
+                </div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="game-code">${state.gameCode}</div>
+                <div class="phase">${state.phase}${state.phase === 'Playing' ? ' — ' + state.turnPhase : ''}</div>
+                <div class="players">${players}</div>
+            `;
+        }
+    </script>
+</body>
+</html>
