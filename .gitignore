@@ -1,0 +1,27 @@
+# .NET
+server/**/bin/
+server/**/obj/
+*.user
+*.suo
+.vs/
+
+# Node
+handset/node_modules/
+handset/dist/
+
+# Unity
+tv/Library/
+tv/Temp/
+tv/Logs/
+tv/obj/
+tv/Build/
+tv/Builds/
+tv/UserSettings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
