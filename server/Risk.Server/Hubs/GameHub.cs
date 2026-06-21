@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Risk.Server.Models;
 using Risk.Server.Services;
 
 namespace Risk.Server.Hubs;
@@ -44,6 +45,11 @@ public class GameHub : Hub
     public async Task Reinforce(int territoryId)
     {
         var state = _game.Reinforce(Context.ConnectionId, territoryId);
+        if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
+        {
+            state.Phase = GamePhase.GameOver;
+            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
+        }
         await BroadcastState(state);
     }
 
@@ -104,6 +110,11 @@ public class GameHub : Hub
     public async Task Fortify(int sourceId, int targetId, int armies)
     {
         var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
+        {
+            state.Phase = GamePhase.GameOver;
+            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
+        }
         await BroadcastState(state);
     }
 
@@ -149,6 +160,11 @@ public class GameHub : Hub
     {
         // TODO: Handle player disconnect (timeout/reconnect window)
         await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task SelectAttack(int? sourceId, int? targetId)
+    {
+        await Clients.Others.SendAsync("AttackSelection", sourceId, targetId);
     }
 
     private async Task BroadcastState(object state)

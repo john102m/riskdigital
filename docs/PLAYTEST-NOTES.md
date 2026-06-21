@@ -58,4 +58,11 @@ Jot issues, tweaks, and ideas here during play. We'll batch them up after.
 - **Tested working**: Edge (desktop), Fire TV Stick Silk browser, portable TV
 - **JVC built-in browser**: dots stretched on X axis — likely non-standard CSS rendering. Low priority edge case.
 - **F11 fullscreen (Edge/Chrome)**: dots drift outward from centre — Egypt (near centre) is correct, but further territories are increasingly offset in ±X and ±Y. Classic overlay/image size mismatch scaling error. `window.resize` event may not fire on F11, or fires before layout updates. Dots are correct before F11 and on actual TV targets. Desktop-only dev issue — park for now.
-- Mission badge (🎯) popup: dismiss by tapping anywhere outside it, not just the badge again
+- ~~Mission badge (🎯) popup: dismiss by tapping anywhere outside it, not just the badge again~~ ✅
+- ~~Fortify screen: default accordion should open the continent where the action was (last attack/capture)~~ ✅
+- ~~Status badge (📊) popup: dismiss by tapping anywhere outside it (same as mission badge)~~ ✅
+- ~~Mission complete overlay (TV): make it a smaller modal rather than full-screen blackout~~ ✅
+- ~~Header badges (🎯 mission, 📊 status, 🃏 cards): enlarge touch targets~~ ✅
+- ~~TV board: show a turn timer next to the active player in the info box~~ ✅
+- ~~TV board: when attacker selects source/target, glow those territories~~ ✅
+- ~~BUG: Mission check only runs on MoveAfterCapture~~ ✅ (now checks after Reinforce and Fortify)

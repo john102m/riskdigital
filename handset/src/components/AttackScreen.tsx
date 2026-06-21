@@ -40,6 +40,11 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     return () => { clearTimeout(t); setIdleHint(null); };
   }, [isMyTurn, sourceId, targetId, awaitingMove, lastResult]);
 
+  // Broadcast selection to TV
+  useEffect(() => {
+    if (isMyTurn) connection.invoke("SelectAttack", sourceId, targetId).catch(() => {});
+  }, [sourceId, targetId]);
+
   useEffect(() => {
     const handler = (result: CombatResult) => {
       setLastResult(result);
@@ -110,13 +115,15 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   };
 
   const moveIn = async () => {
+    const mSource = awaitingMove ? sourceId : gameState.pendingMoveSource;
+    const mTarget = awaitingMove ? targetId : gameState.pendingMoveTarget;
     try {
-      await connection.invoke("MoveAfterCapture", sourceId, targetId, moveArmies);
+      await connection.invoke("MoveAfterCapture", mSource, mTarget, Math.max(moveArmies, gameState.lastDiceCount || 1));
       setAwaitingMove(false);
       setLastResult(null);
       setBlitzSummary(null);
       // Find strongest remaining source's continent to auto-open
-      const remaining = sources.map(t => ({ ...t, armies: t.id === sourceId ? t.armies - moveArmies : t.armies })).filter(t => t.armies > 1);
+      const remaining = sources.map(t => ({ ...t, armies: t.id === mSource ? t.armies - moveArmies : t.armies })).filter(t => t.armies > 1);
       const strongest = remaining.sort((a, b) => b.armies - a.armies)[0];
       setSourceId(null);
       setTargetId(null);
@@ -164,21 +171,24 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     );
   }
 
-  // Move-in UI after capture
-  if (awaitingMove && sourceId !== null && targetId !== null) {
-    const source = gameState.territories.find((t) => t.id === sourceId)!;
+  // Move-in UI after capture (from event or from server state on refresh)
+  const pendingSource = awaitingMove ? sourceId : gameState.pendingMoveSource;
+  const pendingTarget = awaitingMove ? targetId : gameState.pendingMoveTarget;
+  if (isMyTurn && pendingSource !== null && pendingTarget !== null) {
+    const source = gameState.territories.find((t) => t.id === pendingSource)!;
     const minMove = lastResult?.attackerDice.length || Math.min(3, source.armies - 1) || 1;
     const maxMove = source.armies - 1;
+    const effectiveMove = Math.max(minMove, Math.min(moveArmies, maxMove));
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-green-400">{gameState.territories.find(t => t.id === targetId)?.name} Captured!</p>
+        <p className="text-lg font-bold text-green-400">{gameState.territories.find(t => t.id === pendingTarget)?.name} Captured!</p>
         <p className="text-sm text-gray-400">Move troops in</p>
         {blitzSummary && (
           <p className="text-xs text-gray-400">⚡ {blitzSummary.rounds} rounds · You lost {blitzSummary.atkLoss} · They lost {blitzSummary.defLoss}</p>
         )}
         <div className="flex items-center gap-4">
           <button onClick={() => setMoveArmies(Math.max(minMove, moveArmies - 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">−</button>
-          <span className="text-3xl font-bold w-12 text-center">{moveArmies}</span>
+          <span className="text-3xl font-bold w-12 text-center">{effectiveMove}</span>
           <button onClick={() => setMoveArmies(Math.min(maxMove, moveArmies + 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">+</button>
           <button onClick={() => setMoveArmies(maxMove)} className="bg-blue-600 active:bg-blue-700 px-4 py-2 rounded text-xl font-bold">Max</button>
         </div>

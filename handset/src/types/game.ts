@@ -36,6 +36,8 @@ export interface GameState {
   currentPlayerIndex: number;
   attackFrontIds: number[];
   lastDiceCount: number;
+  pendingMoveSource: number | null;
+  pendingMoveTarget: number | null;
 }
 
 export interface CombatResult {
