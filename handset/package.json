@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host --port 3000",
     "build": "tsc -b && vite build",
-    "build:deploy": "vite build --outDir ../server/Risk.Server/wwwroot --emptyOutDir",
+    "build:deploy": "tsc -b && vite build --outDir ../server/Risk.Server/wwwroot",
     "preview": "vite preview"
   },
   "dependencies": {

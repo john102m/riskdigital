@@ -38,6 +38,7 @@ public class HouseRules
 {
     public bool LockedAttackFront { get; set; } = true;
     public bool UseMissions { get; set; } = true;
+    public bool FixedCardValues { get; set; } = true;
 }
 
 public enum MissionType { ContinentConquest, TerritoryCount, Elimination }

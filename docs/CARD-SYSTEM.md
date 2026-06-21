@@ -40,6 +40,19 @@ Player selects exactly 3 cards to trade. Server validates the combination.
 
 `CardTradeCount` is global — shared across all players. This accelerates the game as it progresses.
 
+### House Rule: Fixed Card Values (default ON)
+
+Classic UK/European edition rules — set type determines value, no escalation:
+
+| Set | Armies |
+|-----|--------|
+| 3× Infantry | 4 |
+| 3× Cavalry | 6 |
+| 3× Artillery | 8 |
+| One of each | 10 |
+
+Wilds fill in as the type they complete. Controlled by `HouseRules.FixedCardValues`. When enabled, `CardTradeCount` is not incremented.
+
 ---
 
 ## Territory Bonus

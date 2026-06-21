@@ -286,13 +286,40 @@ public class GameService
         if (!IsValidSet(cards))
             throw new HubException("Invalid card set.");
 
-        // Calculate armies from escalation
-        _state.CardTradeCount++;
-        int armies = _state.CardTradeCount switch
+        // Calculate armies
+        int armies;
+        if (_state.HouseRules.FixedCardValues)
         {
-            1 => 4, 2 => 6, 3 => 8, 4 => 10, 5 => 12, 6 => 15,
-            _ => 15 + (_state.CardTradeCount - 6) * 5
-        };
+            var types = cards.Select(c => c.Type).ToArray();
+            int wilds = types.Count(t => t == CardType.Wild);
+            var nonWild = types.Where(t => t != CardType.Wild).ToArray();
+
+            // Determine effective set type
+            bool isOneOfEach = nonWild.Distinct().Count() + wilds >= 3 && nonWild.Distinct().Count() > 1;
+
+            if (isOneOfEach)
+                armies = 10;
+            else
+            {
+                // All same (or wilds filling in) — use the non-wild type
+                var effectiveType = nonWild.Length > 0 ? nonWild[0] : CardType.Infantry;
+                armies = effectiveType switch
+                {
+                    CardType.Artillery => 8,
+                    CardType.Cavalry => 6,
+                    _ => 4
+                };
+            }
+        }
+        else
+        {
+            _state.CardTradeCount++;
+            armies = _state.CardTradeCount switch
+            {
+                1 => 4, 2 => 6, 3 => 8, 4 => 10, 5 => 12, 6 => 15,
+                _ => 15 + (_state.CardTradeCount - 6) * 5
+            };
+        }
 
         // Territory bonus: +2 for each traded card matching an owned territory
         var bonusIds = new List<int>();
@@ -471,6 +498,81 @@ public class GameService
         return (_state, result);
     }
 
+    public (GameState State, BlitzResult Result) Blitz(string connectionId, int sourceId, int targetId)
+    {
+        if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
+            throw new HubException("Not in attack phase.");
+
+        var player = _state.Players[_state.CurrentPlayerIndex];
+        if (player.ConnectionId != connectionId)
+            throw new HubException("Not your turn.");
+
+        var source = _state.Territories.FirstOrDefault(t => t.Id == sourceId);
+        var target = _state.Territories.FirstOrDefault(t => t.Id == targetId);
+
+        if (source is null || source.OwnerId != _state.CurrentPlayerIndex)
+            throw new HubException("You don't own the source territory.");
+        if (target is null || target.OwnerId == _state.CurrentPlayerIndex)
+            throw new HubException("Target must be an enemy territory.");
+        if (!source.Adjacent.Contains(targetId))
+            throw new HubException("Target is not adjacent to source.");
+        if (_state.HouseRules.LockedAttackFront && _state.AttackFrontIds.Count > 0
+            && !_state.AttackFrontIds.Contains(sourceId))
+            throw new HubException("You must continue attacking from your current front.");
+        if (source.Armies <= 1)
+            throw new HubException("Not enough armies to attack.");
+
+        if (_state.HouseRules.LockedAttackFront && _state.AttackFrontIds.Count == 0)
+            _state.AttackFrontIds.Add(sourceId);
+
+        int startSourceArmies = source.Armies;
+        int startTargetArmies = target.Armies;
+        int rounds = 0;
+
+        int lastDice = 0;
+        while (source.Armies > 1 && target.Armies > 0)
+        {
+            lastDice = Math.Min(3, source.Armies - 1);
+            var attackerDice = RollDice(lastDice).OrderByDescending(d => d).ToArray();
+            int defDice = target.Armies >= 2 ? 2 : 1;
+            var defenderDice = RollDice(defDice).OrderByDescending(d => d).ToArray();
+
+            int comparisons = Math.Min(attackerDice.Length, defenderDice.Length);
+            for (int i = 0; i < comparisons; i++)
+            {
+                if (attackerDice[i] > defenderDice[i])
+                    target.Armies--;
+                else
+                    source.Armies--;
+            }
+            rounds++;
+        }
+
+        bool captured = target.Armies <= 0;
+        // Min move-in = dice used on the final (capturing) round
+        _state.LastDiceCount = Math.Min(lastDice, source.Armies - 1);
+
+        if (captured)
+        {
+            target.OwnerId = _state.CurrentPlayerIndex;
+            target.Armies = 0;
+            if (_state.HouseRules.LockedAttackFront)
+                _state.AttackFrontIds.Add(targetId);
+            if (!player.EarnedCardThisTurn)
+                player.EarnedCardThisTurn = true;
+        }
+
+        var result = new BlitzResult(
+            rounds,
+            startSourceArmies - source.Armies,
+            startTargetArmies - target.Armies,
+            captured, sourceId, targetId,
+            source.Armies, target.Armies
+        );
+
+        return (_state, result);
+    }
+
     public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex, bool MissionWon) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
@@ -486,7 +588,7 @@ public class GameService
         if (source.OwnerId != _state.CurrentPlayerIndex || target.OwnerId != _state.CurrentPlayerIndex)
             throw new HubException("You must own both territories.");
 
-        int minMove = _state.LastDiceCount;
+        int minMove = Math.Min(_state.LastDiceCount, source.Armies - 1);
         if (armies < minMove || armies >= source.Armies)
             throw new HubException($"Must move between {minMove} and {source.Armies - 1} armies.");
 

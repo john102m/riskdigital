@@ -76,6 +76,13 @@ public class GameHub : Hub
         await BroadcastState(state);
     }
 
+    public async Task Blitz(int sourceId, int targetId)
+    {
+        var (state, result) = _game.Blitz(Context.ConnectionId, sourceId, targetId);
+        await Clients.All.SendAsync("BlitzResult", result);
+        await BroadcastState(state);
+    }
+
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
     {
         var (state, forcedTrade, eliminatedIndex, missionWon) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);

@@ -94,6 +94,53 @@ Phone (React/Tailwind) ──SignalR──▶ .NET 8 Server (WHUK) ◀──Sign
 - Elimination fanfare
 - Victory screen with stats
 
+### Dice & Combat Theatre (TV)
+
+Rolling dice was part of the fun in physical Risk. Even digitised, *watching and hearing* the roll adds drama. Flutter proved this — the dice rattle + spin animation on the TV made every roll a communal moment, even though the result was already decided server-side.
+
+**Architecture:**
+- Server resolves combat instantly (already done) and broadcasts `CombatResult`
+- TV receives result but **delays applying state** until animation completes
+- Animation sequence gates further events (same pattern as Flutter's `showDice` flag)
+
+**Sequence (single attack):**
+1. Sound: dice rattle plays immediately on event receipt
+2. Visual: dice sprites spin/tumble (~1s, gradually slowing, cycling random faces)
+3. Dice land on actual values — attacker dice (red) vs defender dice (white)
+4. Brief pause (~1s) — let players react, see the comparison
+5. Apply result: flash casualties, update army counts, show capture if applicable
+6. Ungate — ready for next event
+
+**Sequence (blitz):**
+- No per-roll animation (would be nauseating for 10+ rolls)
+- Instead: rapid-fire dice rattle sound, rolling counter showing rounds, then final summary
+- Optional: show last decisive roll in full if it resulted in capture
+
+**Sound effects (from Flutter, adapt for Risk):**
+| Event | Sound | Notes |
+|-------|-------|-------|
+| Attack roll | dice_rattle | Short sharp rattle, plays every combat |
+| Territory captured | capture_fanfare | Triumphant, brief |
+| Elimination | elimination_crash | Dramatic — player knocked out |
+| Card traded | card_flip | Subtle |
+| Mission complete / victory | victory | Celebratory |
+| Blitz in progress | rapid_ticks | Fast metronome during auto-resolve |
+
+**Handset (lightweight):**
+- Vibration pulse on dice result (Haptics API)
+- Brief CSS shake animation on result display
+- No sound on handset — TV is the theatre, phone is the controller
+
+**Implementation notes:**
+- Unity: `AudioSource` + clips in `Resources/Audio/`, triggered by `CombatResolver.cs`
+- Unity: dice prefab with tumble animation (2D sprite rotation or simple frame animation)
+- Gate pattern: `CombatResolver` queues incoming events, processes sequentially with async/await between animations
+- Debug TV (tv.html): can show dice values immediately (no animation needed for dev)
+
+**Key insight from Flutter:** The delay between "dice rolled" and "result applied" is what creates tension. Even 1.5 seconds transforms a data update into a shared experience. Without it, combat feels like a spreadsheet recalculating.
+
+---
+
 ### Phase 8 — Optional Features
 
 - **Secret missions** — dealt at start, checked on capture/elimination
@@ -340,6 +387,18 @@ Full 42-territory graph. Load at server startup. Each territory has an id (0–4
 ```
 
 This is ready to drop into the server project as `Data/territories.json` and deserialize at startup.
+
+---
+
+## House Rules
+
+Toggleable server-side flags in `HouseRules` class. No lobby UI yet — set in code.
+
+| Rule | Default | Description |
+|------|---------|-------------|
+| `LockedAttackFront` | true | Must attack from starting territory or territories captured this turn. Prevents scattergun attacks across the map. |
+| `UseMissions` | true | Secret mission cards dealt at game start. Win by completing your mission instead of world domination. |
+| `FixedCardValues` | true | Classic UK card trade values (Infantry=4, Cavalry=6, Artillery=8, One-of-each=10). When false, uses escalating global values (4/6/8/10/12/15/+5). |
 
 ---
 
