@@ -337,3 +337,46 @@
 ---
 
 *Updated: 2026-06-21 17:30*
+
+---
+
+## 2026-06-21 Evening — UI Polish, TV Parchment Theme, Bug Fixes
+
+### Completed
+
+- **Badge dismiss on tap-outside** — MissionBadge (🎯) and StatusBadge (📊) both dismiss when tapping anywhere outside the popup
+- **Fortify accordion context** — defaults to continent of last attack front territory
+- **Mission complete overlay (TV)** — smaller centred modal, map visible behind
+- **Header badges 44px touch targets** — min-w/min-h 44px on mission/status badges
+- **Card badge pill-shaped** — rounded-full, flatter (32px height)
+- **TV turn timer** — seconds elapsed next to active player, resets on turn change
+- **TV territory glow on attack selection** — green glow (source) / red glow (target) via SelectAttack hub broadcast
+- **Mission check bug fix** — now checks after Reinforce and Fortify
+- **Parchment theme** — handset popups + TV info box + dice overlay
+- **TV info box tweaks** — wider, bold, nudged right, dark green active player border
+- **Dice overlay centred on screen**
+- **Capture report line break** — territory name on second line
+- **Card trade alert → overlay** — no more blocking alert()
+- **Pending move-in bug fix** — server tracks PendingMoveSource/Target; handset shows move-in on refresh
+
+### Bug Fixes
+
+- Mission not detected during Reinforce/Fortify
+- Refresh during move-in allowed skipping troop placement (0 armies on territory)
+
+### Files Changed
+
+- `server/Risk.Server/Hubs/GameHub.cs`
+- `server/Risk.Server/Models/GameState.cs`
+- `server/Risk.Server/Services/GameService.cs`
+- `server/Risk.Server/wwwroot/tv.html`
+- `handset/src/types/game.ts`
+- `handset/src/components/AttackScreen.tsx`
+- `handset/src/components/MissionBadge.tsx`
+- `handset/src/components/StatusBadge.tsx`
+- `handset/src/components/ReinforceScreen.tsx`
+- `handset/src/components/FortifyScreen.tsx`
+
+---
+
+*Updated: 2026-06-21 20:57*

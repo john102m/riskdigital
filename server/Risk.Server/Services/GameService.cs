@@ -482,6 +482,8 @@ public class GameService
         {
             target.OwnerId = _state.CurrentPlayerIndex;
             target.Armies = 0; // Will be filled by MoveAfterCapture
+            _state.PendingMoveSource = sourceId;
+            _state.PendingMoveTarget = targetId;
             if (_state.HouseRules.LockedAttackFront)
                 _state.AttackFrontIds.Add(targetId);
             if (!player.EarnedCardThisTurn)
@@ -556,6 +558,8 @@ public class GameService
         {
             target.OwnerId = _state.CurrentPlayerIndex;
             target.Armies = 0;
+            _state.PendingMoveSource = sourceId;
+            _state.PendingMoveTarget = targetId;
             if (_state.HouseRules.LockedAttackFront)
                 _state.AttackFrontIds.Add(targetId);
             if (!player.EarnedCardThisTurn)
@@ -594,6 +598,8 @@ public class GameService
 
         source.Armies -= armies;
         target.Armies += armies;
+        _state.PendingMoveSource = null;
+        _state.PendingMoveTarget = null;
 
         // Check elimination
         int defenderId = -1;

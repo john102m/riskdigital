@@ -78,6 +78,7 @@ Human players know missions exist and watch for tells. A smart AI should:
 - **Spread pressure** — maintain presence on multiple fronts so opponents can't deduce the target
 - **Sprint at the end** — once committed, go all-in before others react
 - This mirrors what experienced humans do ("I know everyone knows the missions, so I feint")
+- **Reinforcement misdirection**: for "18 territories with 2+ armies" mission, don't evenly spread 2 everywhere early — that signals the mission. Instead, reinforce strategically (fronts, big stacks) and only distribute the 2s when ready to sprint for the win
 
 ---
 

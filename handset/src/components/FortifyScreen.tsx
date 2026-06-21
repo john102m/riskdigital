@@ -21,6 +21,12 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
   const [armies, setArmies] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(() => {
     const s = gameState.territories.filter((t) => t.ownerId === myIndex && t.armies > 1);
+    if (gameState.attackFrontIds?.length) {
+      const lastFrontId = gameState.attackFrontIds[gameState.attackFrontIds.length - 1];
+      const lastTerritory = gameState.territories.find(t => t.id === lastFrontId);
+      if (lastTerritory && s.some(t => t.continent === lastTerritory.continent))
+        return lastTerritory.continent;
+    }
     return groupByContinent(s)[0]?.continent ?? null;
   });
 

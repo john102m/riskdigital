@@ -73,7 +73,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
             Reinforce
           </span>
           {cards.length > 0 && (
-            <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="px-2 py-1 rounded bg-gray-700 text-xs">
+            <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="min-h-[32px] px-3 flex items-center justify-center rounded-full bg-gray-700 text-sm">
               🃏 {cards.length}
             </button>
           )}
