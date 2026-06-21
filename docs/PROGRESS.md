@@ -169,11 +169,19 @@
 
 ### What's Next
 
-- Build & test card system end-to-end (server build on Lenovo)
 - Blitz attack option
-- Game Over screen
-- TV: card trade event display (replace alert with overlay)
-- Consider accordion for PlacementScreen too
+- Missions (plan doc ready)
+- TV: card trade event display (replace alert with proper overlay)
+
+---
+
+## Additional Completed (same session)
+
+- **Game Over screen (handset)** — 🏆 for winner, 💀 for losers, player standings with territory counts and elimination markers, "New Game" button (host only)
+- **Game Over overlay (TV)** — full-screen dark overlay with trophy + winner name in colour
+- **Debug endpoint** — `GET /admin/gameover` forces game over for testing
+- **PlacementScreen accordion** — now uses ContinentAccordion like all other screens
+- **Card system verified working** — earn, trade, escalation, forced trade all tested end-to-end on Lenovo
 
 ---
 

@@ -6,6 +6,7 @@ import { PlacementScreen } from "./components/PlacementScreen";
 import { ReinforceScreen } from "./components/ReinforceScreen";
 import { AttackScreen } from "./components/AttackScreen";
 import { FortifyScreen } from "./components/FortifyScreen";
+import { GameOverScreen } from "./components/GameOverScreen";
 
 export default function App() {
   const { connection, gameState, cards, forcedTrade, clearForcedTrade } = useConnection();
@@ -52,6 +53,10 @@ export default function App() {
         <p className="text-gray-500 mt-2">Coming soon...</p>
       </div>
     );
+  }
+
+  if (gameState.phase === "GameOver") {
+    return <GameOverScreen gameState={gameState} playerName={playerName} />;
   }
 
   return (
