@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useConnection } from "./hooks/useConnection";
 import { ConnectScreen } from "./components/ConnectScreen";
 import { LobbyScreen } from "./components/LobbyScreen";
@@ -7,10 +7,18 @@ import { ReinforceScreen } from "./components/ReinforceScreen";
 import { AttackScreen } from "./components/AttackScreen";
 import { FortifyScreen } from "./components/FortifyScreen";
 import { GameOverScreen } from "./components/GameOverScreen";
+import { MissionBadge } from "./components/MissionBadge";
+import { MissionWelcome } from "./components/MissionWelcome";
+import { StatusBadge } from "./components/StatusBadge";
 
 export default function App() {
-  const { connection, gameState, cards, forcedTrade, clearForcedTrade } = useConnection();
+  const { connection, gameState, cards, mission, forcedTrade, clearForcedTrade } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
+  const [showMissionWelcome, setShowMissionWelcome] = useState(false);
+
+  useEffect(() => {
+    if (mission) setShowMissionWelcome(true);
+  }, [mission]);
 
   if (!connection) {
     return (
@@ -31,20 +39,25 @@ export default function App() {
   }
 
   if (gameState.phase === "InitialPlacement") {
-    return <PlacementScreen connection={connection} gameState={gameState} playerName={playerName} />;
+    return <>
+      <MissionBadge mission={mission} />
+      <StatusBadge mission={mission} gameState={gameState} playerName={playerName} />
+      {showMissionWelcome && mission && <MissionWelcome mission={mission} onDismiss={() => setShowMissionWelcome(false)} />}
+      <PlacementScreen connection={connection} gameState={gameState} playerName={playerName} />
+    </>;
   }
 
   if (gameState.phase === "Playing") {
     if (gameState.turnPhase === "Reinforce") {
-      return <ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} />;
+      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} /></>;
     }
 
     if (gameState.turnPhase === "Attack") {
-      return <AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} />;
+      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} /></>;
     }
 
     if (gameState.turnPhase === "Fortify") {
-      return <FortifyScreen connection={connection} gameState={gameState} playerName={playerName} />;
+      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><FortifyScreen connection={connection} gameState={gameState} playerName={playerName} /></>;
     }
 
     return (

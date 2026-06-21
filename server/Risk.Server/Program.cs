@@ -44,4 +44,11 @@ app.MapGet("/admin/gameover", (GameService game, IHubContext<GameHub> hub) =>
     return Results.Ok($"Game over — winner: {game.State.Players[game.State.CurrentPlayerIndex].Name}");
 });
 
+app.MapGet("/admin/missions", (GameService game) =>
+{
+    if (game.State is null) return Results.BadRequest("No game");
+    var missions = game.State.Players.Select((p, i) => new { Player = p.Name, Colour = p.Colour, Mission = p.Mission?.Description ?? "none", Fallback = p.Mission?.FallenBackToWorldDomination ?? false });
+    return Results.Ok(missions);
+});
+
 app.Run();
