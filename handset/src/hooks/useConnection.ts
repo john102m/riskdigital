@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { GameState } from "../types/game";
+import { Card, GameState } from "../types/game";
 
 const HUB_URL = import.meta.env.VITE_SERVER_URL
   ? `${import.meta.env.VITE_SERVER_URL}/gamehub`
@@ -10,6 +10,8 @@ export function useConnection() {
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [forcedTrade, setForcedTrade] = useState(false);
 
   useEffect(() => {
     const conn = new signalR.HubConnectionBuilder()
@@ -18,6 +20,11 @@ export function useConnection() {
       .build();
 
     conn.on("GameStateUpdated", (state: GameState) => setGameState(state));
+    conn.on("CardsUpdated", (hand: Card[]) => setCards(hand));
+    conn.on("ForcedTradeRequired", (hand: Card[]) => {
+      setCards(hand);
+      setForcedTrade(true);
+    });
 
     conn.onreconnected(() => {
       const name = localStorage.getItem("risk_name");
@@ -54,5 +61,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState };
+  return { connection, gameState, cards, forcedTrade, clearForcedTrade: () => setForcedTrade(false) };
 }

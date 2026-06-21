@@ -8,6 +8,14 @@ export interface Player {
   isHost: boolean;
   reinforcementsRemaining: number;
   isEliminated: boolean;
+  cardCount: number;
+}
+
+export type CardType = "Infantry" | "Cavalry" | "Artillery" | "Wild";
+
+export interface Card {
+  territoryId: number | null;
+  type: CardType;
 }
 
 export interface Territory {

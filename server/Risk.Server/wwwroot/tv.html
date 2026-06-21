@@ -105,6 +105,14 @@
 
         connection.on('GameStateUpdated', render);
 
+        connection.on('CardTraded', (playerIndex, armies) => {
+            const state = lastState;
+            const name = state ? state.players[playerIndex]?.name : 'Player ' + playerIndex;
+            alert(`${name} traded cards → +${armies} armies`);
+        });
+
+        let lastState = null;
+
         connection.onreconnecting(() => {
             statusEl.textContent = 'Reconnecting...';
             statusEl.className = 'status';
@@ -123,6 +131,7 @@
         });
 
         function render(state) {
+            lastState = state;
             if (!state) {
                 gameInfo.innerHTML = '';
                 playersBar.innerHTML = '';
