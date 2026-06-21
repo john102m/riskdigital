@@ -145,6 +145,21 @@
                 <span class="phase">${state.phase}${state.phase === 'Playing' ? ' — ' + state.turnPhase : ''}</span>
             `;
 
+            // Game Over overlay
+            var overlay = document.getElementById('gameover-overlay');
+            if (state.phase === 'GameOver') {
+                const winner = state.players[state.currentPlayerIndex];
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'gameover-overlay';
+                    overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);z-index:999;flex-direction:column;gap:16px;';
+                    document.body.appendChild(overlay);
+                }
+                overlay.innerHTML = `<div style="font-size:64px">🏆</div><div style="font-size:32px;font-weight:bold;color:${winner.colour}">${winner.name} wins!</div><div style="color:#888">World domination achieved</div>`;
+            } else if (overlay) {
+                overlay.remove();
+            }
+
             playersBar.innerHTML = state.players.map((p, i) => {
                 const terrs = state.territories ? state.territories.filter(t => t.ownerId === i) : [];
                 const armies = terrs.reduce((s, t) => s + t.armies, 0);
@@ -160,13 +175,13 @@
 
             mapEl.style.display = 'flex';
             // Remove old markers
-            const overlay = document.getElementById('map-overlay');
-            overlay.innerHTML = '';
+            const mapOverlay = document.getElementById('map-overlay');
+            mapOverlay.innerHTML = '';
 
             // Size overlay to match rendered image
             const img = mapEl.querySelector('img');
-            overlay.style.width = img.offsetWidth + 'px';
-            overlay.style.height = img.offsetHeight + 'px';
+            mapOverlay.style.width = img.offsetWidth + 'px';
+            mapOverlay.style.height = img.offsetHeight + 'px';
 
             state.territories.forEach(t => {
                 const [x, y] = COORDS[t.id];
@@ -177,7 +192,7 @@
                 div.style.top = y + '%';
                 div.style.background = colour;
                 div.innerHTML = `${t.armies}<span class="t-label">${t.name}</span>`;
-                overlay.appendChild(div);
+                mapOverlay.appendChild(div);
             });
         }
     </script>

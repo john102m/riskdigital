@@ -36,4 +36,12 @@ app.MapGet("/admin/reset", (GameService game, IHubContext<GameHub> hub) =>
     return Results.Ok("Reset");
 });
 
+app.MapGet("/admin/gameover", (GameService game, IHubContext<GameHub> hub) =>
+{
+    if (game.State is null) return Results.BadRequest("No game");
+    game.State.Phase = Risk.Server.Models.GamePhase.GameOver;
+    hub.Clients.All.SendAsync("GameStateUpdated", game.State);
+    return Results.Ok($"Game over — winner: {game.State.Players[game.State.CurrentPlayerIndex].Name}");
+});
+
 app.Run();
