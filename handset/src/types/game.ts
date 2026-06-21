@@ -49,3 +49,9 @@ export interface CombatResult {
   sourceArmies: number;
   targetArmies: number;
 }
+
+export interface Mission {
+  type: "ContinentConquest" | "TerritoryCount" | "Elimination";
+  description: string;
+  fallenBackToWorldDomination: boolean;
+}

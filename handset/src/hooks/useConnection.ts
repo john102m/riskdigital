@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { Card, GameState } from "../types/game";
+import { Card, GameState, Mission } from "../types/game";
 
 const HUB_URL = import.meta.env.VITE_SERVER_URL
   ? `${import.meta.env.VITE_SERVER_URL}/gamehub`
@@ -12,6 +12,7 @@ export function useConnection() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [forcedTrade, setForcedTrade] = useState(false);
+  const [mission, setMission] = useState<Mission | null>(null);
 
   useEffect(() => {
     const conn = new signalR.HubConnectionBuilder()
@@ -21,6 +22,7 @@ export function useConnection() {
 
     conn.on("GameStateUpdated", (state: GameState) => setGameState(state));
     conn.on("CardsUpdated", (hand: Card[]) => setCards(hand));
+    conn.on("MissionUpdated", (m: Mission) => setMission(m));
     conn.on("ForcedTradeRequired", (hand: Card[]) => {
       setCards(hand);
       setForcedTrade(true);
@@ -61,5 +63,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState, cards, forcedTrade, clearForcedTrade: () => setForcedTrade(false) };
+  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false) };
 }

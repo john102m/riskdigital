@@ -28,6 +28,11 @@ public class GameHub : Hub
     {
         var state = _game.StartGame(Context.ConnectionId);
         await BroadcastState(state);
+        if (state.HouseRules.UseMissions)
+        {
+            foreach (var p in state.Players.Where(p => p.Mission is not null))
+                await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
+        }
     }
 
     public async Task PlaceArmy(int territoryId)
@@ -73,9 +78,11 @@ public class GameHub : Hub
 
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
     {
-        var (state, forcedTrade, eliminatedIndex) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
+        var (state, forcedTrade, eliminatedIndex, missionWon) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
         if (eliminatedIndex >= 0)
             await Clients.All.SendAsync("PlayerEliminated", eliminatedIndex, state.CurrentPlayerIndex);
+        if (missionWon)
+            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
         if (forcedTrade)
             await Clients.Caller.SendAsync("ForcedTradeRequired", state.Players.First(p => p.ConnectionId == Context.ConnectionId).Cards);
         await BroadcastState(state);
@@ -101,7 +108,11 @@ public class GameHub : Hub
             await Clients.Caller.SendAsync("GameStateUpdated", _game.State);
             var player = _game.State.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
             if (player is not null)
+            {
                 await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
+                if (player.Mission is not null)
+                    await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
+            }
         }
     }
 
@@ -112,8 +123,19 @@ public class GameHub : Hub
             await Clients.Caller.SendAsync("GameStateUpdated", _game.State);
             var player = _game.State.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
             if (player is not null)
+            {
                 await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
+                if (player.Mission is not null)
+                    await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
+            }
         }
+    }
+
+    public async Task GetMission()
+    {
+        var player = _game.State?.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player?.Mission is not null)
+            await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

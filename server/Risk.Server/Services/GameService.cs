@@ -78,6 +78,8 @@ public class GameService
         DealTerritories();
         SetStartingArmies();
         GenerateDeck();
+        if (_state.HouseRules.UseMissions)
+            DealMissions();
         _state.Phase = GamePhase.InitialPlacement;
         _state.CurrentPlayerIndex = 0;
 
@@ -168,6 +170,79 @@ public class GameService
             int j = Random.Shared.Next(i + 1);
             (deck[i], deck[j]) = (deck[j], deck[i]);
         }
+    }
+
+    private void DealMissions()
+    {
+        var colourNames = new[] { "Red", "Blue", "Green", "Yellow", "Purple", "Orange" };
+        var missions = new List<Mission>
+        {
+            new() { Type = MissionType.ContinentConquest, Description = "Control North America and Africa", RequiredContinents = ["North America", "Africa"] },
+            new() { Type = MissionType.ContinentConquest, Description = "Control North America and Australia", RequiredContinents = ["North America", "Australia"] },
+            new() { Type = MissionType.ContinentConquest, Description = "Control Asia and South America", RequiredContinents = ["Asia", "South America"] },
+            new() { Type = MissionType.ContinentConquest, Description = "Control Asia and Africa", RequiredContinents = ["Asia", "Africa"] },
+            new() { Type = MissionType.ContinentConquest, Description = "Control Europe, South America, and a third continent", RequiredContinents = ["Europe", "South America"] },
+            new() { Type = MissionType.ContinentConquest, Description = "Control Europe, Australia, and a third continent", RequiredContinents = ["Europe", "Australia"] },
+            new() { Type = MissionType.TerritoryCount, Description = "Control 18 territories with at least 2 armies each", TerritoryCount = 18, MinArmiesPerTerritory = 2 },
+            new() { Type = MissionType.TerritoryCount, Description = "Control 24 territories", TerritoryCount = 24, MinArmiesPerTerritory = 1 },
+        };
+
+        // Add elimination missions only for colours in the game
+        for (int i = 0; i < _state!.Players.Count; i++)
+            missions.Add(new Mission { Type = MissionType.Elimination, Description = $"Eliminate {colourNames[i]}", TargetPlayerIndex = i });
+
+        // Shuffle
+        for (int i = missions.Count - 1; i > 0; i--)
+        {
+            int j = Random.Shared.Next(i + 1);
+            (missions[i], missions[j]) = (missions[j], missions[i]);
+        }
+
+        // Deal — if player draws their own elimination, swap with next in deck
+        int deckIdx = 0;
+        for (int i = 0; i < _state.Players.Count; i++)
+        {
+            while (deckIdx < missions.Count
+                && missions[deckIdx].Type == MissionType.Elimination
+                && missions[deckIdx].TargetPlayerIndex == i)
+                deckIdx++;
+
+            _state.Players[i].Mission = deckIdx < missions.Count
+                ? missions[deckIdx++]
+                : new Mission { Type = MissionType.TerritoryCount, Description = "Control 24 territories", TerritoryCount = 24, MinArmiesPerTerritory = 1 };
+        }
+    }
+
+    public bool CheckMissionComplete(int playerIndex)
+    {
+        var mission = _state!.Players[playerIndex].Mission;
+        if (mission is null || mission.FallenBackToWorldDomination)
+            return _state.Territories.All(t => t.OwnerId == playerIndex); // world domination
+
+        return mission.Type switch
+        {
+            MissionType.ContinentConquest => CheckContinentMission(playerIndex, mission),
+            MissionType.TerritoryCount => _state.Territories.Count(t => t.OwnerId == playerIndex && t.Armies >= (mission.MinArmiesPerTerritory ?? 1)) >= mission.TerritoryCount,
+            MissionType.Elimination => mission.TargetPlayerIndex is int target && _state.Players[target].IsEliminated
+                && _state.Territories.Any(t => t.OwnerId == playerIndex), // attacker must still be alive
+            _ => false
+        };
+    }
+
+    private bool CheckContinentMission(int playerIndex, Mission mission)
+    {
+        foreach (var name in mission.RequiredContinents!)
+        {
+            if (!_territoryData.Continents.Any(c => c.Name == name && c.Territories.All(id => _state!.Territories[id].OwnerId == playerIndex)))
+                return false;
+        }
+
+        // "Third continent of your choice" — check if description mentions it
+        if (mission.Description.Contains("third continent"))
+            return _territoryData.Continents.Any(c => !mission.RequiredContinents.Contains(c.Name)
+                && c.Territories.All(id => _state!.Territories[id].OwnerId == playerIndex));
+
+        return true;
     }
 
     private void AdvancePlacementTurn()
@@ -396,7 +471,7 @@ public class GameService
         return (_state, result);
     }
 
-    public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
+    public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex, bool MissionWon) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
             throw new HubException("Not in attack phase.");
@@ -430,17 +505,35 @@ public class GameService
                 // Transfer cards to attacker
                 player.Cards.AddRange(_state.Players[i].Cards);
                 _state.Players[i].Cards.Clear();
+
+                // Fallback: any player whose elimination target was killed by someone else
+                if (_state.HouseRules.UseMissions)
+                {
+                    for (int p = 0; p < _state.Players.Count; p++)
+                    {
+                        if (p == _state.CurrentPlayerIndex) continue;
+                        var m = _state.Players[p].Mission;
+                        if (m is { Type: MissionType.Elimination } && m.TargetPlayerIndex == i)
+                            m.FallenBackToWorldDomination = true;
+                    }
+                }
             }
         }
 
-        // Check win condition
-        if (_state.Territories.All(t => t.OwnerId == _state.CurrentPlayerIndex))
+        // Check win — mission or world domination
+        bool missionWon = false;
+        if (_state.HouseRules.UseMissions && CheckMissionComplete(_state.CurrentPlayerIndex))
+        {
+            _state.Phase = GamePhase.GameOver;
+            missionWon = true;
+        }
+        else if (_state.Territories.All(t => t.OwnerId == _state.CurrentPlayerIndex))
         {
             _state.Phase = GamePhase.GameOver;
         }
 
         bool forcedTrade = player.Cards.Count >= 5;
-        return (_state, forcedTrade, defenderId);
+        return (_state, forcedTrade, defenderId, missionWon);
     }
 
     private static int[] RollDice(int count)

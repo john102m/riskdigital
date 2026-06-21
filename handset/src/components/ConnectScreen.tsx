@@ -38,7 +38,7 @@ export function ConnectScreen({ connection, onJoined }: Props) {
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-6 gap-4">
       <div className="text-5xl">🎲</div>
       <h1 className="text-4xl font-bold tracking-tight">Risk</h1>
-      <p className="text-gray-500 text-sm">World Domination</p>
+      <p className="text-gray-500 text-sm">Digital Board Game</p>
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
 

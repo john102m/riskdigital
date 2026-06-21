@@ -22,7 +22,7 @@ export function GameOverScreen({ gameState, playerName }: Props) {
         {isMe ? "Victory!" : `${winner.name} wins!`}
       </h1>
       <p className="text-gray-400 text-center">
-        {isMe ? "You conquered the world." : "World domination achieved."}
+        {isMe ? "Mission complete." : `${winner.name} completed their mission.`}
       </p>
       <div className="mt-4 w-full max-w-xs space-y-2">
         {gameState.players.map((p, i) => {

@@ -37,6 +37,20 @@ public class GameState
 public class HouseRules
 {
     public bool LockedAttackFront { get; set; } = true;
+    public bool UseMissions { get; set; } = true;
+}
+
+public enum MissionType { ContinentConquest, TerritoryCount, Elimination }
+
+public class Mission
+{
+    public MissionType Type { get; set; }
+    public string Description { get; set; } = "";
+    public List<string>? RequiredContinents { get; set; }
+    public int? TerritoryCount { get; set; }
+    public int? MinArmiesPerTerritory { get; set; }
+    public int? TargetPlayerIndex { get; set; }
+    public bool FallenBackToWorldDomination { get; set; }
 }
 
 public class Player
@@ -51,6 +65,8 @@ public class Player
     public int CardCount => Cards.Count;
     public bool EarnedCardThisTurn { get; set; }
     public bool IsEliminated { get; set; }
+    [JsonIgnore]
+    public Mission? Mission { get; set; }
 }
 
 public class Territory
