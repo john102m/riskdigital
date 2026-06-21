@@ -1,5 +1,6 @@
 import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
+import { groupByContinent, CONTINENT_COLOURS } from "../utils/groupByContinent";
 
 interface Props {
   connection: HubConnection;
@@ -12,9 +13,8 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-  const myTerritories = gameState.territories
-    .filter((t) => t.ownerId === myIndex)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const myTerritories = gameState.territories.filter((t) => t.ownerId === myIndex);
+  const grouped = groupByContinent(myTerritories);
 
   const placeArmy = async (territoryId: number) => {
     try {
@@ -42,24 +42,33 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
         <p className="text-sm text-gray-500 mt-1">{me.reinforcementsRemaining} armies remaining</p>
       </div>
 
-      <ul className="flex-1 grid grid-cols-2 gap-0.5 content-start pb-2">
-        {myTerritories.map((t) => (
-          <li key={t.id}>
-            <button
-              onClick={() => placeArmy(t.id)}
-              disabled={!isMyTurn}
-              style={isMyTurn ? { backgroundColor: me.colour + "33" } : {}}
-              className={`w-full text-left px-1.5 py-1 rounded flex justify-between items-center border border-white/10
-                ${isMyTurn ? "active:brightness-125" : "bg-gray-800/50 opacity-50"}`}
-            >
-              <div className="truncate">
-                <span className="font-medium text-xs">{t.name}</span>
-              </div>
-              <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
-            </button>
-          </li>
+      <div className="flex-1 overflow-y-auto pb-2">
+        {grouped.map((g) => (
+          <div key={g.continent} className="mb-2">
+            <div className="text-xs font-bold uppercase tracking-wider px-1 mb-0.5" style={{ color: CONTINENT_COLOURS[g.continent] }}>
+              {g.continent}
+            </div>
+            <ul className="grid grid-cols-2 gap-0.5">
+              {g.territories.map((t) => (
+                <li key={t.id}>
+                  <button
+                    onClick={() => placeArmy(t.id)}
+                    disabled={!isMyTurn}
+                    style={isMyTurn ? { backgroundColor: me.colour + "33" } : {}}
+                    className={`w-full text-left px-2 py-2 rounded flex justify-between items-center border border-white/10
+                      ${isMyTurn ? "active:brightness-125" : "bg-gray-800/50 opacity-50"}`}
+                  >
+                    <div className="truncate">
+                      <span className="font-medium text-sm">{t.name}</span>
+                    </div>
+                    <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

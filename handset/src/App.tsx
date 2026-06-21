@@ -8,7 +8,7 @@ import { AttackScreen } from "./components/AttackScreen";
 import { FortifyScreen } from "./components/FortifyScreen";
 
 export default function App() {
-  const { connection, gameState } = useConnection();
+  const { connection, gameState, cards, forcedTrade, clearForcedTrade } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
 
   if (!connection) {
@@ -35,11 +35,11 @@ export default function App() {
 
   if (gameState.phase === "Playing") {
     if (gameState.turnPhase === "Reinforce") {
-      return <ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} />;
+      return <ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} />;
     }
 
     if (gameState.turnPhase === "Attack") {
-      return <AttackScreen connection={connection} gameState={gameState} playerName={playerName} />;
+      return <AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} />;
     }
 
     if (gameState.turnPhase === "Fortify") {

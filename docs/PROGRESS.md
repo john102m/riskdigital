@@ -127,3 +127,54 @@
 - Highlight on TV when territory selected on phone (pulse/glow)
 - Continent completion indicator (e.g. "3/4 South America")
 - Territory buttons with small continent colour stripe/icon
+
+---
+
+## 2026-06-21 Session — Card System & Handset UI Polish
+
+### Completed
+
+- **Card system (server)** — 44-card deck (42 territory + 2 wild), shuffled at game start
+- **Card earning** — flag set on first capture per turn, card dealt from deck at EndAttack
+- **TradeCards hub method** — validates sets (all same / all different / wild combos), escalating bonus (4/6/8/10/12/15/+5), territory bonus (+2 auto-placed on matching owned territories), cards returned to deck and reshuffled
+- **Forced trade gate** — Reinforce blocks placement if 5+ cards; post-elimination transfers cards to attacker, fires ForcedTradeRequired if >5
+- **Elimination detection** — MoveAfterCapture detects eliminated players, transfers cards, broadcasts PlayerEliminated
+- **Card privacy** — Cards and Deck JsonIgnored from broadcast; CardCount (computed) public; CardsUpdated sent to caller only (Rejoin, GetState, EndAttack, TradeCards)
+- **Card system (handset)** — Card/CardType types, CardsUpdated + ForcedTradeRequired events in useConnection hook
+- **ReinforceScreen trade UI** — card count badge (🃏 N), expandable card panel, tap-to-select 3, trade button, placement blocked until traded down
+- **AttackScreen forced trade modal** — full-screen overlay after elimination, same card selection UI, loops until <5
+- **Debug TV alert** — CardTraded event shows alert with player name and army bonus
+- **Continent grouping** — all territory lists grouped by continent with coloured headers matching map (yellow NA, red SA, blue Europe, dark gold Africa, green Asia, purple Australia)
+- **Collapsible accordion** — Reinforce, Attack, Fortify all use mutually-exclusive accordion (one group open at a time), first group open by default
+- **Bigger touch targets** — all territory buttons bumped to px-3 py-2 text-sm (pill buttons) or px-2 py-2 text-sm (grid buttons)
+- **Fortify multi-step flow** — split into 3 screens (Source → Target → Army stepper + confirm) to avoid overcrowding
+- **Auto-collapse on selection** — Attack source picker collapses accordion when source chosen, freeing space for target
+- **CARD-SYSTEM.md** — design doc with decisions locked in (counts public, hands private, cards reshuffled back in, trade all on elimination)
+
+### Files Changed
+
+- `server/Risk.Server/Models/GameState.cs` — Deck, CardTradeCount, EarnedCardThisTurn, Card.TerritoryId nullable, JsonIgnore
+- `server/Risk.Server/Services/GameService.cs` — GenerateDeck, ShuffleDeck, TradeCards, IsValidSet, earn/forced trade logic, elimination
+- `server/Risk.Server/Hubs/GameHub.cs` — TradeCards, CardsUpdated broadcasts, ForcedTradeRequired, PlayerEliminated
+- `server/Risk.Server/wwwroot/tv.html` — CardTraded alert handler
+- `handset/src/types/game.ts` — Card, CardType, cardCount on Player
+- `handset/src/hooks/useConnection.ts` — CardsUpdated, ForcedTradeRequired events, cards/forcedTrade state
+- `handset/src/App.tsx` — passes cards/forcedTrade to screens
+- `handset/src/utils/groupByContinent.ts` — shared utility + continent colours (corrected to match map)
+- `handset/src/components/PlacementScreen.tsx` — continent grouping, bigger buttons
+- `handset/src/components/ReinforceScreen.tsx` — continent accordion, card trade UI, bigger buttons
+- `handset/src/components/AttackScreen.tsx` — continent accordion, forced trade modal, bigger buttons
+- `handset/src/components/FortifyScreen.tsx` — multi-step flow, continent accordion, bigger buttons
+- `docs/CARD-SYSTEM.md` — new design doc
+
+### What's Next
+
+- Build & test card system end-to-end (server build on Lenovo)
+- Blitz attack option
+- Game Over screen
+- TV: card trade event display (replace alert with overlay)
+- Consider accordion for PlacementScreen too
+
+---
+
+*Updated: 2026-06-21*

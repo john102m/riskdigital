@@ -1,14 +1,20 @@
 import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
-import { GameState, CombatResult } from "../types/game";
+import { Card, GameState, CombatResult } from "../types/game";
+import { groupByContinent } from "../utils/groupByContinent";
+import { ContinentAccordion } from "./ContinentAccordion";
+import { CardTradePanel } from "./CardTradePanel";
 
 interface Props {
   connection: HubConnection;
   gameState: GameState;
   playerName: string;
+  cards: Card[];
+  forcedTrade: boolean;
+  clearForcedTrade: () => void;
 }
 
-export function AttackScreen({ connection, gameState, playerName }: Props) {
+export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -20,6 +26,7 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
   const [lastResult, setLastResult] = useState<CombatResult | null>(null);
   const [awaitingMove, setAwaitingMove] = useState(false);
   const [moveArmies, setMoveArmies] = useState(1);
+  const [expanded, setExpanded] = useState<string | null>("__init__");
 
   useEffect(() => {
     const handler = (result: CombatResult) => {
@@ -57,6 +64,11 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
   const maxDice = selectedSource ? Math.min(3, selectedSource.armies - 1) : 0;
   const effectiveDice = Math.max(1, Math.min(diceCount, maxDice));
 
+  if (expanded === "__init__" && sources.length > 0) {
+    const firstContinent = groupByContinent(sources)[0]?.continent;
+    if (firstContinent) setExpanded(firstContinent);
+  }
+
   const attack = async () => {
     if (sourceId === null || targetId === null) return;
     try {
@@ -73,6 +85,7 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
       setLastResult(null);
       setSourceId(null);
       setTargetId(null);
+      setExpanded("__init__");
     } catch (e: any) {
       alert(e.message);
     }
@@ -85,6 +98,17 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
       alert(e.message);
     }
   };
+
+  // Forced trade modal (after elimination)
+  if (forcedTrade && cards.length >= 5) {
+    return (
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
+        <p className="text-lg font-bold text-amber-400">Captured cards — must trade!</p>
+        <p className="text-sm text-gray-400">You have {cards.length} cards. Trade until under 5.</p>
+        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => { if (cards.length - 3 < 5) clearForcedTrade(); }} />
+      </div>
+    );
+  }
 
   if (!isMyTurn) {
     return (
@@ -145,16 +169,21 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
 
       {/* Source picker */}
       <p className="text-xs text-gray-500 uppercase mb-1">Attack from:</p>
-      <div className="flex flex-wrap gap-1 mb-3">
-        {sources.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); }}
-            className={`px-2 py-1 rounded text-xs ${sourceId === t.id ? "bg-green-600" : "bg-gray-700"}`}
-          >
-            {t.name} ({t.armies})
-          </button>
-        ))}
+      <div className="mb-3">
+        <ContinentAccordion
+          territories={sources}
+          expanded={expanded}
+          onToggle={(c) => setExpanded((e) => e === c ? null : c)}
+          renderButton={(t) => (
+            <button
+              key={t.id}
+              onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); setExpanded(null); }}
+              className={`px-3 py-2 rounded text-sm ${sourceId === t.id ? "bg-green-600" : "bg-gray-700"}`}
+            >
+              {t.name} ({t.armies})
+            </button>
+          )}
+        />
       </div>
 
       {/* Target picker */}
@@ -166,7 +195,7 @@ export function AttackScreen({ connection, gameState, playerName }: Props) {
               <button
                 key={t.id}
                 onClick={() => setTargetId(t.id)}
-                className={`px-2 py-1 rounded text-xs ${targetId === t.id ? "bg-red-600" : "bg-gray-700"}`}
+                className={`px-3 py-2 rounded text-sm ${targetId === t.id ? "bg-red-600" : "bg-gray-700"}`}
               >
                 {t.name} ({t.armies})
               </button>

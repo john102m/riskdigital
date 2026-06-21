@@ -77,6 +77,7 @@ public class GameService
 
         DealTerritories();
         SetStartingArmies();
+        GenerateDeck();
         _state.Phase = GamePhase.InitialPlacement;
         _state.CurrentPlayerIndex = 0;
 
@@ -148,6 +149,27 @@ public class GameService
         }
     }
 
+    private void GenerateDeck()
+    {
+        var types = new[] { CardType.Infantry, CardType.Cavalry, CardType.Artillery };
+        _state!.Deck = _state.Territories
+            .Select((t, i) => new Card { TerritoryId = t.Id, Type = types[i % 3] })
+            .ToList();
+        _state.Deck.Add(new Card { TerritoryId = null, Type = CardType.Wild });
+        _state.Deck.Add(new Card { TerritoryId = null, Type = CardType.Wild });
+        ShuffleDeck();
+    }
+
+    private void ShuffleDeck()
+    {
+        var deck = _state!.Deck;
+        for (int i = deck.Count - 1; i > 0; i--)
+        {
+            int j = Random.Shared.Next(i + 1);
+            (deck[i], deck[j]) = (deck[j], deck[i]);
+        }
+    }
+
     private void AdvancePlacementTurn()
     {
         if (_state!.Players.All(p => p.ReinforcementsRemaining <= 0))
@@ -166,6 +188,74 @@ public class GameService
         while (_state.Players[_state.CurrentPlayerIndex].ReinforcementsRemaining <= 0);
     }
 
+    public (GameState State, int ArmiesGranted, List<int> TerritoryBonusIds) TradeCards(string connectionId, int[] cardIndices)
+    {
+        if (_state is null || _state.Phase != GamePhase.Playing)
+            throw new HubException("Not in playing phase.");
+
+        if (_state.TurnPhase != TurnPhase.Reinforce && _state.TurnPhase != TurnPhase.Attack)
+            throw new HubException("Cannot trade cards in this phase.");
+
+        var player = _state.Players[_state.CurrentPlayerIndex];
+        if (player.ConnectionId != connectionId)
+            throw new HubException("Not your turn.");
+
+        if (cardIndices.Length != 3 || cardIndices.Distinct().Count() != 3)
+            throw new HubException("Must trade exactly 3 distinct cards.");
+
+        if (cardIndices.Any(i => i < 0 || i >= player.Cards.Count))
+            throw new HubException("Invalid card index.");
+
+        var cards = cardIndices.Select(i => player.Cards[i]).ToArray();
+
+        if (!IsValidSet(cards))
+            throw new HubException("Invalid card set.");
+
+        // Calculate armies from escalation
+        _state.CardTradeCount++;
+        int armies = _state.CardTradeCount switch
+        {
+            1 => 4, 2 => 6, 3 => 8, 4 => 10, 5 => 12, 6 => 15,
+            _ => 15 + (_state.CardTradeCount - 6) * 5
+        };
+
+        // Territory bonus: +2 for each traded card matching an owned territory
+        var bonusIds = new List<int>();
+        foreach (var card in cards)
+        {
+            if (card.TerritoryId is int tid && _state.Territories[tid].OwnerId == _state.CurrentPlayerIndex)
+            {
+                _state.Territories[tid].Armies += 2;
+                bonusIds.Add(tid);
+            }
+        }
+
+        player.ReinforcementsRemaining += armies;
+
+        // Remove cards (highest index first to preserve indices)
+        foreach (var i in cardIndices.OrderByDescending(x => x))
+            player.Cards.RemoveAt(i);
+
+        // Return cards to deck and shuffle
+        _state.Deck.AddRange(cards);
+        ShuffleDeck();
+
+        return (_state, armies, bonusIds);
+    }
+
+    private static bool IsValidSet(Card[] cards)
+    {
+        var types = cards.Select(c => c.Type).ToArray();
+        int wilds = types.Count(t => t == CardType.Wild);
+
+        if (wilds >= 2) return true; // 2 wilds + anything
+        if (wilds == 1) return true; // 1 wild + any 2
+
+        // No wilds: all same or all different
+        var nonWild = types.Where(t => t != CardType.Wild).ToArray();
+        return nonWild.Distinct().Count() == 1 || nonWild.Distinct().Count() == 3;
+    }
+
     public GameState Reinforce(string connectionId, int territoryId)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Reinforce)
@@ -174,6 +264,9 @@ public class GameService
         var player = _state.Players[_state.CurrentPlayerIndex];
         if (player.ConnectionId != connectionId)
             throw new HubException("Not your turn.");
+
+        if (player.Cards.Count >= 5)
+            throw new HubException("You must trade cards first (5+ cards).");
 
         if (player.ReinforcementsRemaining <= 0)
             throw new HubException("No reinforcements remaining.");
@@ -214,6 +307,12 @@ public class GameService
         var player = _state.Players[_state.CurrentPlayerIndex];
         if (player.ConnectionId != connectionId)
             throw new HubException("Not your turn.");
+
+        if (player.EarnedCardThisTurn && _state.Deck.Count > 0)
+        {
+            player.Cards.Add(_state.Deck[^1]);
+            _state.Deck.RemoveAt(_state.Deck.Count - 1);
+        }
 
         _state.TurnPhase = TurnPhase.Fortify;
         return _state;
@@ -283,6 +382,8 @@ public class GameService
             target.Armies = 0; // Will be filled by MoveAfterCapture
             if (_state.HouseRules.LockedAttackFront)
                 _state.AttackFrontIds.Add(targetId);
+            if (!player.EarnedCardThisTurn)
+                player.EarnedCardThisTurn = true;
         }
 
         var result = new CombatResult(
@@ -295,7 +396,7 @@ public class GameService
         return (_state, result);
     }
 
-    public GameState MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
+    public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
             throw new HubException("Not in attack phase.");
@@ -317,13 +418,29 @@ public class GameService
         source.Armies -= armies;
         target.Armies += armies;
 
+        // Check elimination
+        int defenderId = -1;
+        for (int i = 0; i < _state.Players.Count; i++)
+        {
+            if (i != _state.CurrentPlayerIndex && !_state.Players[i].IsEliminated
+                && !_state.Territories.Any(t => t.OwnerId == i))
+            {
+                _state.Players[i].IsEliminated = true;
+                defenderId = i;
+                // Transfer cards to attacker
+                player.Cards.AddRange(_state.Players[i].Cards);
+                _state.Players[i].Cards.Clear();
+            }
+        }
+
         // Check win condition
         if (_state.Territories.All(t => t.OwnerId == _state.CurrentPlayerIndex))
         {
             _state.Phase = GamePhase.GameOver;
         }
 
-        return _state;
+        bool forcedTrade = player.Cards.Count >= 5;
+        return (_state, forcedTrade, defenderId);
     }
 
     private static int[] RollDice(int count)
@@ -342,6 +459,8 @@ public class GameService
         var player = _state.Players[_state.CurrentPlayerIndex];
         if (player.ConnectionId != connectionId)
             throw new HubException("Not your turn.");
+
+        player.EarnedCardThisTurn = false;
 
         // Advance to next non-eliminated player
         do

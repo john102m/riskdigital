@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Risk.Server.Models;
 
 public enum GamePhase
@@ -26,6 +28,9 @@ public class GameState
     public int? AttackFrontId { get; set; }
     public List<int> AttackFrontIds { get; set; } = [];
     public int LastDiceCount { get; set; }
+    [JsonIgnore]
+    public List<Card> Deck { get; set; } = [];
+    public int CardTradeCount { get; set; }
     public HouseRules HouseRules { get; set; } = new();
 }
 
@@ -41,7 +46,10 @@ public class Player
     public string Colour { get; set; } = "";
     public bool IsHost { get; set; }
     public int ReinforcementsRemaining { get; set; }
+    [JsonIgnore]
     public List<Card> Cards { get; set; } = [];
+    public int CardCount => Cards.Count;
+    public bool EarnedCardThisTurn { get; set; }
     public bool IsEliminated { get; set; }
 }
 
@@ -57,7 +65,7 @@ public class Territory
 
 public class Card
 {
-    public int TerritoryId { get; set; }
+    public int? TerritoryId { get; set; }
     public CardType Type { get; set; }
 }
 
