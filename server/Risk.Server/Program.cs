@@ -25,6 +25,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.UseCors();
+app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapHub<GameHub>("/gamehub");
@@ -50,5 +51,7 @@ app.MapGet("/admin/missions", (GameService game) =>
     var missions = game.State.Players.Select((p, i) => new { Player = p.Name, Colour = p.Colour, Mission = p.Mission?.Description ?? "none", Fallback = p.Mission?.FallenBackToWorldDomination ?? false });
     return Results.Ok(missions);
 });
+
+app.MapFallbackToFile("index.html");
 
 app.Run();

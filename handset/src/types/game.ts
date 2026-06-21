@@ -55,3 +55,14 @@ export interface Mission {
   description: string;
   fallenBackToWorldDomination: boolean;
 }
+
+export interface BlitzResult {
+  rounds: number;
+  totalAttackerLosses: number;
+  totalDefenderLosses: number;
+  captured: boolean;
+  sourceId: number;
+  targetId: number;
+  sourceArmies: number;
+  targetArmies: number;
+}

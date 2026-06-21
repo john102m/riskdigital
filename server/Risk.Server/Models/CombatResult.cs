@@ -11,3 +11,14 @@ public record CombatResult(
     int SourceArmies,
     int TargetArmies
 );
+
+public record BlitzResult(
+    int Rounds,
+    int TotalAttackerLosses,
+    int TotalDefenderLosses,
+    bool Captured,
+    int SourceId,
+    int TargetId,
+    int SourceArmies,
+    int TargetArmies
+);

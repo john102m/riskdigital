@@ -186,3 +186,154 @@
 ---
 
 *Updated: 2026-06-21*
+
+---
+
+## 2026-06-21 Late Session — Missions & Blitz
+
+### Completed
+
+- **Mission system (server)** — 14 mission cards (6 continent conquest, 2 territory count, 6 elimination), dealt at game start
+- **Mission types** — ContinentConquest (including "third continent of choice" auto-check), TerritoryCount (18×2+ or 24), Elimination (with fallback to world domination if target killed by another player)
+- **Mission deck & dealing** — filters to active colours, shuffles, avoids self-elimination deals
+- **CheckMissionComplete** — called from MoveAfterCapture, checks all mission types
+- **Elimination fallback** — when a player's elimination target is killed by someone else, their mission reverts to world domination
+- **Mission privacy** — Mission is JsonIgnored, sent privately via MissionUpdated on StartGame/Rejoin/GetState
+- **GetMission hub method** — caller-only response
+- **MissionComplete broadcast** — on win, sends player index + mission description to all
+- **UseMissions house rule** — defaults to `true` (missions always on for now)
+- **GET /admin/missions** — debug endpoint showing all players' missions
+- **Mission welcome modal (handset)** — shows on game enter with mission description + hint about 🎯 icon
+- **🎯 Mission badge (handset)** — top-left, tap to view your secret mission anytime
+- **📊 Status badge (handset)** — top-right, tap to see mission progress + continent breakdown
+- **Blitz attack (server)** — Blitz hub method, loops max-dice attacks until capture or source ≤ 1
+- **BlitzResult DTO** — rounds, total losses both sides, captured flag
+- **⚡ Blitz button (handset)** — purple button alongside regular Attack, no dice selection needed
+- **Blitz result display** — shows total losses summary instead of individual dice
+- **ConnectScreen subtitle** — changed from "World Domination" to "Digital Board Game"
+- **GameOverScreen text** — now says "Mission complete" instead of world domination
+- **PLAYTEST-NOTES.md** — created for live note-taking during play
+
+### Files Changed
+
+- `server/Risk.Server/Models/GameState.cs` — Mission, MissionType, HouseRules.UseMissions, Player.Mission
+- `server/Risk.Server/Models/CombatResult.cs` — BlitzResult record
+- `server/Risk.Server/Services/GameService.cs` — DealMissions, CheckMissionComplete, CheckContinentMission, Blitz
+- `server/Risk.Server/Hubs/GameHub.cs` — Blitz, GetMission, MissionUpdated sends, MissionComplete broadcast
+- `server/Risk.Server/Program.cs` — /admin/missions endpoint
+- `handset/src/types/game.ts` — Mission, BlitzResult interfaces
+- `handset/src/hooks/useConnection.ts` — MissionUpdated handler, mission state
+- `handset/src/App.tsx` — MissionBadge, StatusBadge, MissionWelcome wiring
+- `handset/src/components/MissionBadge.tsx` — new (top-left)
+- `handset/src/components/MissionWelcome.tsx` — new (one-time modal)
+- `handset/src/components/StatusBadge.tsx` — new (top-right)
+- `handset/src/components/AttackScreen.tsx` — Blitz button, BlitzResult handler
+- `handset/src/components/ConnectScreen.tsx` — subtitle text
+- `handset/src/components/GameOverScreen.tsx` — win text
+- `docs/PLAYTEST-NOTES.md` — new
+
+### Next Steps (morning)
+
+1. **Build & test missions** — create game with 2-3 players, check `/admin/missions`, verify MissionWelcome shows, check mission badge works, test win via mission
+2. **Build & test blitz** — pick a territory with lots of armies, blitz a weak neighbour, verify capture + move-in flow
+3. **Implement playtest UI fixes:**
+   - Auto-collapse accordion when card panel opens
+   - Hint popup when tradeable card set available at reinforce start
+   - Bump instruction label contrast ("ATTACK FROM" etc)
+   - `select-none` on all buttons/text (add to body or index.css)
+   - Don't collapse attacker accordion after source selection
+   - Dice rolls display on debug TV
+   - "Max" button on move-in stepper
+4. **Merge branches** — missions + blitz → main
+
+---
+
+*Updated: 2026-06-21 02:38*
+
+---
+
+## 2026-06-21 Afternoon — Playtest, Bug Fixes, TV Web Board
+
+### Completed
+
+- **Playtest UI tweaks (all 8 items):**
+  - Auto-collapse accordion when card panel opens
+  - Tradeable set hint banner (4s, tappable)
+  - Instruction label contrast bumped
+  - `select-none` on body (no long-press text selection)
+  - Source accordion stays open after attacker selection
+  - Dice results overlay on TV (bottom-right, 5s fade)
+  - Max button on move-in stepper (blue)
+  - Attack/Blitz buttons split to own row (phone overflow fix)
+- **Blitz move-in bug fixes:**
+  - Min move-in now uses last round's dice count (tracked in loop)
+  - Min can never exceed max (Math.Min guard)
+  - Empty attackerDice array handled correctly for blitz
+- **Fortify screen** — reverted to single screen with accordions + Max button
+- **Fixed card values house rule** — `HouseRules.FixedCardValues` (default: true). Infantry=4, Cavalry=6, Artillery=8, One-of-each=10
+- **Attack screen enhancements:**
+  - Auto-open strongest attacker's continent after move-in
+  - Idle hint (10s) with context-aware prompts
+  - Blitz summary (rounds/losses) on move-in screen
+  - "Territory Name Captured!" instead of generic text
+- **TV web board layout overhaul:**
+  - Full-viewport map (no header/player bar stealing space)
+  - Info box overlay bottom-left (game code, phase, players stacked)
+  - JS `syncOverlay()` — positions dot overlay to match image rendered area
+  - Dots hidden until positioned (opacity fade-in, no snap)
+  - `vw`-based circle scaling with max-size cap (34px)
+  - Wake lock API for screensaver prevention
+  - Game-over overlay cleared on reset + missionWinDesc shown on win
+- **Server fixes:**
+  - `UseDefaultFiles()` + `MapFallbackToFile("index.html")` — handset served from wwwroot
+  - Image confirmed as cropped version (no black borders)
+- **Handset build** — `build:deploy` script updated (no --emptyOutDir, preserves tv.html/map)
+- **Dice & Combat Theatre** — design section added to RISK-DESIGN.md (from Flutter learnings)
+- **House Rules documented** — all 3 rules in RISK-DESIGN.md table
+- **New docs created:**
+  - `docs/AI-PLAYER.md` — AI design (tiers, mission concealment, architecture)
+  - `docs/IDEAS.md` — consolidated future possibilities
+  - `docs/BOARD-POLISH.md` — shared web/Unity polish planning
+
+### Bug Fixes
+
+- Blitz move-in min=3 when source only had 2 armies (min > max crash)
+- Blitz move-in allowed 0 troops (empty attackerDice fallback)
+- LastDiceCount for blitz used startSourceArmies instead of final round's actual dice
+- TV game-over overlay not cleared on /admin/reset (early return skipped removal)
+
+### Tested & Confirmed Working
+
+- Blitz (single die when source depletes, capture + move-in flow)
+- TV web board on: Edge desktop, Chrome desktop, Fire TV Stick Silk, JVC native browser
+- Handset served from wwwroot via server on :5000
+- Board viewable on phone browser (spectator)
+
+### Known Issues (parked)
+
+- F11 fullscreen (Edge/Chrome): dots drift outward from centre — overlay/image size mismatch. Desktop-only, works fine on actual TV targets.
+- JVC native browser: minor dot stretch on X axis (non-standard CSS rendering)
+- Silk browser Wake Lock API may not be supported (use Fire Stick screensaver settings instead)
+
+### Files Changed
+
+- `server/Risk.Server/Program.cs`
+- `server/Risk.Server/Models/GameState.cs`
+- `server/Risk.Server/Services/GameService.cs`
+- `server/Risk.Server/wwwroot/tv.html`
+- `handset/package.json`
+- `handset/src/index.css`
+- `handset/src/components/ReinforceScreen.tsx`
+- `handset/src/components/AttackScreen.tsx`
+- `handset/src/components/FortifyScreen.tsx`
+- `docs/RISK-DESIGN.md`
+- `docs/CARD-SYSTEM.md`
+- `docs/NEXT-STEPS.md`
+- `docs/PLAYTEST-NOTES.md`
+- `docs/AI-PLAYER.md` (new)
+- `docs/IDEAS.md` (new)
+- `docs/BOARD-POLISH.md` (new)
+
+---
+
+*Updated: 2026-06-21 17:30*

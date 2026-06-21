@@ -1,9 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
 import { Card, GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { CardTradePanel } from "./CardTradePanel";
+
+function hasTradeableSet(cards: Card[]): boolean {
+  if (cards.length < 3) return false;
+  const wilds = cards.filter(c => c.type === "Wild").length;
+  if (wilds >= 2) return true; // 2 wilds + anything
+  const types = cards.filter(c => c.type !== "Wild").map(c => c.type);
+  // All same
+  for (const t of ["Infantry", "Cavalry", "Artillery"]) {
+    if (types.filter(x => x === t).length + wilds >= 3) return true;
+  }
+  // All different
+  const unique = new Set(types);
+  if (unique.size >= 3) return true;
+  if (unique.size >= 2 && wilds >= 1) return true;
+  return false;
+}
 
 interface Props {
   connection: HubConnection;
@@ -21,6 +37,15 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
 
   const [showCards, setShowCards] = useState(cards.length >= 5);
   const [expanded, setExpanded] = useState<string | null>(() => groupByContinent(myTerritories)[0]?.continent ?? null);
+  const [tradeHint, setTradeHint] = useState(false);
+
+  useEffect(() => {
+    if (isMyTurn && !mustTrade && hasTradeableSet(cards)) {
+      setTradeHint(true);
+      const t = setTimeout(() => setTradeHint(false), 4000);
+      return () => clearTimeout(t);
+    }
+  }, []);
 
   const mustTrade = isMyTurn && cards.length >= 5;
 
@@ -48,7 +73,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
             Reinforce
           </span>
           {cards.length > 0 && (
-            <button onClick={() => setShowCards(!showCards)} className="px-2 py-1 rounded bg-gray-700 text-xs">
+            <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="px-2 py-1 rounded bg-gray-700 text-xs">
               🃏 {cards.length}
             </button>
           )}
@@ -65,6 +90,11 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
       </div>
 
       {/* Card trade panel */}
+      {tradeHint && !showCards && (
+        <button onClick={() => { setShowCards(true); setExpanded(null); setTradeHint(false); }} className="mb-2 px-3 py-2 bg-amber-800/60 border border-amber-500/50 rounded text-sm text-amber-300 text-center animate-pulse">
+          🃏 You have a tradeable set — tap to open cards
+        </button>
+      )}
       {showCards && (
         <div className="mb-3">
           <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => setShowCards(false)} />

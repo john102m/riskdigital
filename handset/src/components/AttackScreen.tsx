@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
-import { Card, GameState, CombatResult } from "../types/game";
+import { Card, GameState, CombatResult, BlitzResult } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { CardTradePanel } from "./CardTradePanel";
@@ -26,18 +26,40 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   const [lastResult, setLastResult] = useState<CombatResult | null>(null);
   const [awaitingMove, setAwaitingMove] = useState(false);
   const [moveArmies, setMoveArmies] = useState(1);
+  const [blitzSummary, setBlitzSummary] = useState<{ rounds: number; atkLoss: number; defLoss: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>("__init__");
+  const [idleHint, setIdleHint] = useState<string | null>(null);
+
+  // Idle hint: show context-aware prompt after 5s inactivity
+  useEffect(() => {
+    if (!isMyTurn || awaitingMove) { setIdleHint(null); return; }
+    const hint = sourceId === null ? "Choose a territory to attack from"
+      : targetId === null ? "Choose a target to attack"
+      : "Tap Attack or ⚡ Blitz";
+    const t = setTimeout(() => setIdleHint(hint), 10000);
+    return () => { clearTimeout(t); setIdleHint(null); };
+  }, [isMyTurn, sourceId, targetId, awaitingMove, lastResult]);
 
   useEffect(() => {
     const handler = (result: CombatResult) => {
       setLastResult(result);
+      setBlitzSummary(null);
       if (result.captured && isMyTurn) {
         setAwaitingMove(true);
         setMoveArmies(result.attackerDice.length);
       }
     };
+    const blitzHandler = (result: BlitzResult) => {
+      setLastResult({ attackerDice: [], defenderDice: [], attackerLosses: result.totalAttackerLosses, defenderLosses: result.totalDefenderLosses, captured: result.captured, sourceId: result.sourceId, targetId: result.targetId, sourceArmies: result.sourceArmies, targetArmies: result.targetArmies } as CombatResult);
+      if (result.captured && isMyTurn) {
+        setAwaitingMove(true);
+        setMoveArmies(Math.min(3, result.sourceArmies - 1) || 1);
+        setBlitzSummary({ rounds: result.rounds, atkLoss: result.totalAttackerLosses, defLoss: result.totalDefenderLosses });
+      }
+    };
     connection.on("CombatResult", handler);
-    return () => { connection.off("CombatResult", handler); };
+    connection.on("BlitzResult", blitzHandler);
+    return () => { connection.off("CombatResult", handler); connection.off("BlitzResult", blitzHandler); };
   }, [connection, isMyTurn]);
 
   const sources = gameState.territories
@@ -78,14 +100,27 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     }
   };
 
+  const blitz = async () => {
+    if (sourceId === null || targetId === null) return;
+    try {
+      await connection.invoke("Blitz", sourceId, targetId);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
   const moveIn = async () => {
     try {
       await connection.invoke("MoveAfterCapture", sourceId, targetId, moveArmies);
       setAwaitingMove(false);
       setLastResult(null);
+      setBlitzSummary(null);
+      // Find strongest remaining source's continent to auto-open
+      const remaining = sources.map(t => ({ ...t, armies: t.id === sourceId ? t.armies - moveArmies : t.armies })).filter(t => t.armies > 1);
+      const strongest = remaining.sort((a, b) => b.armies - a.armies)[0];
       setSourceId(null);
       setTargetId(null);
-      setExpanded("__init__");
+      setExpanded(strongest?.continent ?? "__init__");
     } catch (e: any) {
       alert(e.message);
     }
@@ -132,18 +167,22 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   // Move-in UI after capture
   if (awaitingMove && sourceId !== null && targetId !== null) {
     const source = gameState.territories.find((t) => t.id === sourceId)!;
-    const minMove = lastResult?.attackerDice.length ?? 1;
+    const minMove = lastResult?.attackerDice.length || Math.min(3, source.armies - 1) || 1;
     const maxMove = source.armies - 1;
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-green-400">Territory Captured!</p>
-        <p className="text-sm text-gray-400">Move troops into {gameState.territories.find(t => t.id === targetId)?.name}</p>
+        <p className="text-lg font-bold text-green-400">{gameState.territories.find(t => t.id === targetId)?.name} Captured!</p>
+        <p className="text-sm text-gray-400">Move troops in</p>
+        {blitzSummary && (
+          <p className="text-xs text-gray-400">⚡ {blitzSummary.rounds} rounds · You lost {blitzSummary.atkLoss} · They lost {blitzSummary.defLoss}</p>
+        )}
         <div className="flex items-center gap-4">
           <button onClick={() => setMoveArmies(Math.max(minMove, moveArmies - 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">−</button>
           <span className="text-3xl font-bold w-12 text-center">{moveArmies}</span>
           <button onClick={() => setMoveArmies(Math.min(maxMove, moveArmies + 1))} className="bg-amber-600 active:bg-amber-700 px-4 py-2 rounded text-xl font-bold">+</button>
+          <button onClick={() => setMoveArmies(maxMove)} className="bg-blue-600 active:bg-blue-700 px-4 py-2 rounded text-xl font-bold">Max</button>
         </div>
-        <p className="text-xs text-gray-500">Min {minMove} · Max {maxMove}</p>
+        <p className="text-xs text-gray-400">Min {minMove} · Max {maxMove}</p>
         <button onClick={moveIn} className="bg-green-600 active:bg-green-700 px-6 py-3 rounded-lg text-lg font-bold">
           Move Troops
         </button>
@@ -162,13 +201,21 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       {/* Last result */}
       {lastResult && (
         <div className="text-center text-sm mb-2 p-2 bg-gray-800 rounded">
-          🎲 <span className="text-green-400">{lastResult.attackerDice.join(", ")}</span> vs <span className="text-red-400">{lastResult.defenderDice.join(", ")}</span>
-          {" · "}Lost: {lastResult.attackerLosses} / {lastResult.defenderLosses}
+          {lastResult.attackerDice.length > 0 ? (
+            <>🎲 <span className="text-green-400">{lastResult.attackerDice.join(", ")}</span> vs <span className="text-red-400">{lastResult.defenderDice.join(", ")}</span>{" · "}Lost: {lastResult.attackerLosses} / {lastResult.defenderLosses}</>
+          ) : (
+            <>⚡ Blitz · Lost: <span className="text-green-400">{lastResult.attackerLosses}</span> / <span className="text-red-400">{lastResult.defenderLosses}</span>{lastResult.captured && " — Captured!"}</>
+          )}
         </div>
       )}
 
+      {/* Idle hint */}
+      {idleHint && (
+        <p className="text-center text-sm text-amber-300/80 mb-2 animate-pulse">{idleHint}</p>
+      )}
+
       {/* Source picker */}
-      <p className="text-xs text-gray-500 uppercase mb-1">Attack from:</p>
+      <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Attack from:</p>
       <div className="mb-3">
         <ContinentAccordion
           territories={sources}
@@ -177,7 +224,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
           renderButton={(t) => (
             <button
               key={t.id}
-              onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); setExpanded(null); }}
+              onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); }}
               className={`px-3 py-2 rounded text-sm ${sourceId === t.id ? "bg-green-600" : "bg-gray-700"}`}
             >
               {t.name} ({t.armies})
@@ -189,7 +236,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       {/* Target picker */}
       {sourceId !== null && (
         <>
-          <p className="text-xs text-gray-500 uppercase mb-1">Attack:</p>
+          <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Attack:</p>
           <div className="flex flex-wrap gap-1 mb-3">
             {targets.map((t) => (
               <button
@@ -206,21 +253,28 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
 
       {/* Dice picker + Attack button */}
       {sourceId !== null && targetId !== null && (
-        <div className="flex items-center gap-3 mb-3">
-          <p className="text-xs text-gray-500">Dice:</p>
-          {[1, 2, 3].map((d) => (
-            <button
-              key={d}
-              disabled={d > maxDice}
-              onClick={() => setDiceCount(d)}
-              className={`px-3 py-2 rounded font-bold ${d === diceCount ? "bg-amber-600" : "bg-gray-700"} ${d > maxDice ? "opacity-30" : ""}`}
-            >
-              {d}
+        <div className="mb-3 flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-gray-400">Dice:</p>
+            {[1, 2, 3].map((d) => (
+              <button
+                key={d}
+                disabled={d > maxDice}
+                onClick={() => setDiceCount(d)}
+                className={`px-3 py-2 rounded font-bold ${d === diceCount ? "bg-amber-600" : "bg-gray-700"} ${d > maxDice ? "opacity-30" : ""}`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
+              ⚔️ Attack
             </button>
-          ))}
-          <button onClick={attack} disabled={maxDice < 1} className="ml-auto bg-red-600 active:bg-red-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
-            ⚔️ Attack
-          </button>
+            <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
+              ⚡ Blitz
+            </button>
+          </div>
         </div>
       )}
 
