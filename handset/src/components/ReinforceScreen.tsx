@@ -39,6 +39,8 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
   const [expanded, setExpanded] = useState<string | null>(() => groupByContinent(myTerritories)[0]?.continent ?? null);
   const [tradeHint, setTradeHint] = useState(false);
 
+  const mustTrade = isMyTurn && cards.length >= 5;
+
   useEffect(() => {
     if (isMyTurn && !mustTrade && hasTradeableSet(cards)) {
       setTradeHint(true);
@@ -47,7 +49,14 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     }
   }, []);
 
-  const mustTrade = isMyTurn && cards.length >= 5;
+  if (!isMyTurn) {
+    return (
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Reinforcing</span>
+      </div>
+    );
+  }
 
   const reinforce = async (territoryId: number) => {
     try {
@@ -65,27 +74,25 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     }
   };
 
+  if (mustTrade) {
+    return (
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
+        <p className="text-lg font-bold text-amber-400">Trade cards first ({cards.length} held)</p>
+        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => {}} />
+      </div>
+    );
+  }
+
   return (
-    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-4">
-      <div className="text-center mb-3">
-        <div className="flex items-center justify-center gap-2">
-          <span className="px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider" style={{ backgroundColor: me.colour, color: "#fff" }}>
-            Reinforce
-          </span>
-          {cards.length > 0 && (
-            <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="min-h-[32px] px-3 flex items-center justify-center rounded-full bg-gray-700 text-sm">
-              🃏 {cards.length}
-            </button>
-          )}
-        </div>
-        {isMyTurn ? (
-          mustTrade
-            ? <p className="text-lg font-bold text-amber-400 mt-2">Trade cards first (5+ held)</p>
-            : <p className="text-lg font-bold text-green-400 mt-2">Place {me.reinforcementsRemaining} armies</p>
-        ) : (
-          <p className="text-lg text-gray-400 mt-2">
-            <span style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span> is reinforcing
-          </p>
+    <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
+      <div className="flex items-center justify-center gap-2 mb-2 min-h-[33px]">
+        <span className="px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider" style={{ backgroundColor: me.colour, color: "#fff" }}>
+          Reinforce · {me.reinforcementsRemaining}
+        </span>
+        {cards.length > 0 && (
+          <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="min-h-[32px] px-3 flex items-center justify-center rounded-full bg-gray-700 text-sm">
+            🃏 {cards.length}
+          </button>
         )}
       </div>
 
@@ -111,10 +118,10 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
             <button
               key={t.id}
               onClick={() => reinforce(t.id)}
-              disabled={!isMyTurn || me.reinforcementsRemaining <= 0 || mustTrade}
-              style={isMyTurn && !mustTrade ? { backgroundColor: me.colour + "33" } : {}}
+              disabled={me.reinforcementsRemaining <= 0}
+              style={{ backgroundColor: me.colour + "33" }}
               className={`w-full text-left px-2 py-2 rounded flex justify-between items-center border border-white/10
-                ${isMyTurn && me.reinforcementsRemaining > 0 && !mustTrade ? "active:brightness-125" : "opacity-50"}`}
+                ${me.reinforcementsRemaining > 0 ? "active:brightness-125" : "opacity-50"}`}
             >
               <span className="font-medium text-sm truncate">{t.name}</span>
               <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
@@ -123,7 +130,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
         />
       </div>
 
-      {isMyTurn && me.reinforcementsRemaining === 0 && !mustTrade && (
+      {me.reinforcementsRemaining === 0 && (
         <button onClick={endReinforce} className="mt-2 bg-green-600 active:bg-green-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
           Done → Attack
         </button>

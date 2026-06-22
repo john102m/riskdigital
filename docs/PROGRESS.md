@@ -380,3 +380,48 @@
 ---
 
 *Updated: 2026-06-21 20:57*
+
+---
+
+## 2026-06-22 — Handset UI Improvements & TV Tweaks
+
+### Completed
+
+- **Minimal waiting screens** — all 4 phases (Placement, Reinforce, Attack, Fortify) now show only current player's coloured name + phase label when not your turn. No accordions, no buttons, no territory lists.
+- **Coloured top border** — 3px border in current player's colour on all waiting screens for instant identification.
+- **Chip-collapse source picker (Attack)** — after selecting source, accordion collapses to compact chip `🟢 Brazil (8) ✕`. Tap ✕ to reselect.
+- **Chip-collapse source picker (Fortify)** — same pattern applied.
+- **Must-trade = card panel only** — when forced to trade (5+ cards), Reinforce screen shows only the card panel. No territory list cluttering the view.
+- **Default max dice + merged buttons** — Attack button now shows dice count inline `⚔️ 3🎲`. Small override toggles only appear when maxDice > 1. Saves an entire row.
+- **Compact single-line headers** — all phases use tight header rows. Attack/Fortify phase badges centred with action buttons (`Done → Fortify`, `Skip → End`) pinned at bottom.
+- **Badge size reduction** — 🎯 and 📊 badges reduced to 75% (33px) to fit alongside headers on one line.
+- **Header alignment** — headers aligned vertically with fixed badges using `pt-2` + `min-h-[33px]`.
+- **TV activity feed coalescing** — repeated placements to same territory now bump count (`+3 Western US`) instead of 3 separate lines.
+- **TV activity feed bold text** — better readability on TV.
+- **TV turn popup during Initial Placement** — shows `"John's turn"` popup (in player colour) when active player changes, with 1.2s delay for animation clearance.
+- **HANDSET-UI-IMPROVEMENTS.md** — design doc created with full analysis and priority ranking.
+
+### Bug Fixes
+
+- Fixed header overlapping fixed mission/status badges (pt-14 → pt-2 + alignment)
+- Fixed Fortify stray `</div>` from action button refactor
+
+### Files Changed
+
+- `handset/src/components/PlacementScreen.tsx`
+- `handset/src/components/ReinforceScreen.tsx`
+- `handset/src/components/AttackScreen.tsx`
+- `handset/src/components/FortifyScreen.tsx`
+- `handset/src/components/MissionBadge.tsx`
+- `handset/src/components/StatusBadge.tsx`
+- `server/Risk.Server/wwwroot/tv.html`
+- `docs/HANDSET-UI-IMPROVEMENTS.md` (new)
+- `docs/PLAYTEST-NOTES.md`
+
+### Hardware
+
+- **Z440 workstation arrived!** Next session will be from the new machine after full setup (VS2022, Unity, Node, Git, etc.)
+
+---
+
+*Updated: 2026-06-22*

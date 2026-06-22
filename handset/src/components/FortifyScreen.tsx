@@ -64,20 +64,16 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
 
   if (!isMyTurn) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-        <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: currentPlayer.colour }}>
-          Fortify
-        </span>
-        <p className="text-lg text-gray-400 mt-4">
-          <span style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span> is fortifying
-        </p>
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Fortifying</span>
       </div>
     );
   }
 
   return (
-    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-4">
-      <div className="text-center mb-3">
+    <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
+      <div className="flex items-center justify-center mb-2 min-h-[33px] mx-10">
         <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: me.colour }}>
           Fortify
         </span>
@@ -85,23 +81,34 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
 
       <div className="flex-1 overflow-y-auto">
         {/* Source picker */}
-        <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Move from:</p>
-        <div className="mb-3">
-          <ContinentAccordion
-            territories={sources}
-            expanded={expanded}
-            onToggle={(c) => setExpanded((e) => e === c ? null : c)}
-            renderButton={(t) => (
-              <button
-                key={t.id}
-                onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); setArmies(1); }}
-                className={`px-3 py-2 rounded text-sm ${sourceId === t.id ? "bg-green-600" : "bg-gray-700"}`}
-              >
-                {t.name} ({t.armies})
-              </button>
-            )}
-          />
-        </div>
+        {sourceId === null ? (
+          <>
+            <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Move from:</p>
+            <div className="mb-3">
+              <ContinentAccordion
+                territories={sources}
+                expanded={expanded}
+                onToggle={(c) => setExpanded((e) => e === c ? null : c)}
+                renderButton={(t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setSourceId(t.id); setTargetId(null); setArmies(1); }}
+                    className="px-3 py-2 rounded text-sm bg-gray-700"
+                  >
+                    {t.name} ({t.armies})
+                  </button>
+                )}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-green-700 flex items-center gap-1">
+              🟢 {selectedSource?.name} ({selectedSource?.armies})
+              <button onClick={() => { setSourceId(null); setTargetId(null); setArmies(1); }} className="ml-1 text-white/60 hover:text-white">✕</button>
+            </span>
+          </div>
+        )}
 
         {/* Target picker */}
         {sourceId !== null && (
@@ -133,16 +140,20 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-2 mt-2">
-        <button onClick={skip} className="flex-1 bg-amber-600 active:bg-amber-700 px-4 py-3 rounded-lg text-lg font-bold">
-          Skip → End Turn
-        </button>
-        {sourceId !== null && targetId !== null && (
+      {sourceId !== null && targetId !== null ? (
+        <div className="flex gap-2 mt-auto">
+          <button onClick={skip} className="flex-1 bg-amber-600 active:bg-amber-700 px-4 py-3 rounded-lg text-lg font-bold">
+            Skip → End
+          </button>
           <button onClick={fortify} className="flex-1 bg-green-600 active:bg-green-700 px-4 py-3 rounded-lg text-lg font-bold">
             Fortify & End
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <button onClick={skip} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
+          Skip → End Turn
+        </button>
+      )}
     </div>
   );
 }
