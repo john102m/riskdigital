@@ -66,3 +66,9 @@ Jot issues, tweaks, and ideas here during play. We'll batch them up after.
 - ~~TV board: show a turn timer next to the active player in the info box~~ ✅
 - ~~TV board: when attacker selects source/target, glow those territories~~ ✅
 - ~~BUG: Mission check only runs on MoveAfterCapture~~ ✅ (now checks after Reinforce and Fortify)
+
+## 2026-06-21 Evening — AI Bot Testing
+
+- [ ] Bot Alice attack glow not showing on TV — investigate `AttackSelection` broadcast from AiService vs handset `SelectAttack` (may be event name mismatch or null handling)
+- [ ] TV board needs an attack notification modal/banner for ALL players — "PlayerName is attacking X from Y" so everyone can follow the action without squinting at dots
+- [ ] TV board should show active player + phase info prominently — "John is placing armies" / "Bot Alice is attacking" / "Waiting for Dave to fortify" — so everyone knows why they're waiting

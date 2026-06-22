@@ -7,7 +7,7 @@ namespace Risk.Server.Services;
 public class GameService
 {
     private static readonly string[] PlayerColours = ["#E53E3E", "#3182CE", "#38A169", "#D69E2E", "#805AD5", "#DD6B20"];
-    private static readonly int[] StartingArmies = [0, 0, 23, 35, 30, 25, 20]; // index = player count (2p reduced for dev)
+    private static readonly int[] StartingArmies = [0, 0, 23, 16, 30, 25, 20]; // index = player count (2p reduced for dev)
 
     private readonly TerritoryData _territoryData;
     private GameState? _state;
@@ -58,6 +58,36 @@ public class GameService
             ConnectionId = connectionId,
             Name = playerName,
             Colour = PlayerColours[_state.Players.Count]
+        });
+
+        return _state;
+    }
+
+
+    private static readonly string[] AiNames = ["Bot Alice", "Bot Bob", "Bot Carol", "Bot Dave", "Bot Eve"];
+
+    public GameState AddAiPlayer(string connectionId)
+    {
+        if (_state is null || _state.Phase != GamePhase.Lobby)
+            throw new HubException("Not in lobby.");
+
+        var caller = _state.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
+        if (caller is null || !caller.IsHost)
+            throw new HubException("Only the host can add AI players.");
+
+        if (_state.Players.Count >= 6)
+            throw new HubException("Game is full.");
+
+        var usedNames = _state.Players.Select(p => p.Name).ToHashSet();
+        var name = AiNames.FirstOrDefault(n => !usedNames.Contains(n))
+            ?? $"Bot {_state.Players.Count}";
+
+        _state.Players.Add(new Player
+        {
+            ConnectionId = $"ai-{Guid.NewGuid():N}",
+            Name = name,
+            Colour = PlayerColours[_state.Players.Count],
+            IsAI = true
         });
 
         return _state;

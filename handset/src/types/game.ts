@@ -8,6 +8,7 @@ export interface Player {
   isHost: boolean;
   reinforcementsRemaining: number;
   isEliminated: boolean;
+  isAI: boolean;
   cardCount: number;
 }
 

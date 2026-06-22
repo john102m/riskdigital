@@ -7,10 +7,12 @@ namespace Risk.Server.Hubs;
 public class GameHub : Hub
 {
     private readonly GameService _game;
+    private readonly AiService _ai;
 
-    public GameHub(GameService game)
+    public GameHub(GameService game, AiService ai)
     {
         _game = game;
+        _ai = ai;
     }
 
     public async Task CreateGame(string playerName)
@@ -25,26 +27,37 @@ public class GameHub : Hub
         await BroadcastState(state);
     }
 
+    public async Task AddAI()
+    {
+        var state = _game.AddAiPlayer(Context.ConnectionId);
+        await BroadcastState(state);
+    }
+
     public async Task StartGame()
     {
         var state = _game.StartGame(Context.ConnectionId);
         await BroadcastState(state);
         if (state.HouseRules.UseMissions)
         {
-            foreach (var p in state.Players.Where(p => p.Mission is not null))
+            foreach (var p in state.Players.Where(p => p.Mission is not null && !p.IsAI))
                 await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
         }
+        _ai.TriggerIfAi();
     }
 
     public async Task PlaceArmy(int territoryId)
     {
+        var playerIndex = _game.State!.CurrentPlayerIndex;
         var state = _game.PlaceArmy(Context.ConnectionId, territoryId);
+        await Clients.All.SendAsync("ArmiesPlaced", playerIndex, territoryId, 1);
         await BroadcastState(state);
+        _ai.TriggerIfAi();
     }
 
     public async Task Reinforce(int territoryId)
     {
         var state = _game.Reinforce(Context.ConnectionId, territoryId);
+        await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, 1);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;
@@ -104,12 +117,15 @@ public class GameHub : Hub
     public async Task EndTurn()
     {
         var state = _game.EndTurn(Context.ConnectionId);
+        await Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await BroadcastState(state);
+        _ai.TriggerIfAi();
     }
 
     public async Task Fortify(int sourceId, int targetId, int armies)
     {
         var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        await Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;

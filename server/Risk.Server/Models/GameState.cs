@@ -68,6 +68,7 @@ public class Player
     public int CardCount => Cards.Count;
     public bool EarnedCardThisTurn { get; set; }
     public bool IsEliminated { get; set; }
+    public bool IsAI { get; set; }
     [JsonIgnore]
     public Mission? Mission { get; set; }
 }
