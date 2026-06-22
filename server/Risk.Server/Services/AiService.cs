@@ -49,14 +49,16 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
     {
         while (player.ReinforcementsRemaining > 0 && state.Players[state.CurrentPlayerIndex].ConnectionId == connId)
         {
-            await Delay(500, 1000);
+            await Delay(2000, 2500);
             var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
             var target = owned[Random.Shared.Next(owned.Count)];
+            var idx = state.CurrentPlayerIndex;
             game.PlaceArmy(connId, target.Id);
+            await hub.Clients.All.SendAsync("ArmiesPlaced", idx, target.Id, 1);
             await Broadcast();
         }
 
-        await Delay(300);
+        await Delay(500);
         TriggerIfAi();
     }
 
@@ -65,7 +67,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
         // Trade cards if forced (5+)
         while (player.Cards.Count >= 5)
         {
-            await Delay(1000, 2000);
+            await Delay(2000, 3000);
             var set = FindValidSet(player.Cards);
             if (set is null) break;
             game.TradeCards(connId, set);
@@ -73,17 +75,18 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
             await Broadcast();
         }
 
-        // Place armies randomly
+        // Place armies one at a time
         while (player.ReinforcementsRemaining > 0)
         {
-            await Delay(800, 1500);
+            await Delay(2000, 2500);
             var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
             var target = owned[Random.Shared.Next(owned.Count)];
             game.Reinforce(connId, target.Id);
+            await hub.Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, target.Id, 1);
             await Broadcast();
         }
 
-        await Delay(500, 1000);
+        await Delay(1000, 1500);
         game.EndReinforce(connId);
         await Broadcast();
     }
@@ -124,7 +127,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
 
             // Show selection glow on TV
             await hub.Clients.All.SendAsync("AttackSelection", source.Id, target.Id);
-            await Delay(3000, 4000);
+            await Delay(2500, 3500);
 
             int dice = Math.Min(3, source.Armies - 1);
             var (_, result) = game.Attack(connId, source.Id, target.Id, dice);
@@ -134,7 +137,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
             // Move in after capture
             if (result.Captured)
             {
-                await Delay(1500, 2000);
+                await Delay(2000, 2500);
                 int min = Math.Min(state.LastDiceCount, source.Armies - 1);
                 int max = source.Armies - 1;
                 if (min > 0 && max > 0)
@@ -147,7 +150,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
             }
 
             // Delay between attacks
-            await Delay(3000, 4000);
+            await Delay(2500, 3500);
         }
 
         // Clear glow
@@ -157,7 +160,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
 
     private async Task EndAttack(GameState state, Player player, string connId)
     {
-        await Delay(500, 1000);
+        await Delay(1000, 1500);
         game.EndAttack(connId);
         await Broadcast();
     }
@@ -167,14 +170,15 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
         // 50% chance to skip
         if (Random.Shared.Next(2) == 0)
         {
-            await Delay(500, 1000);
+            await Delay(1000, 1500);
             game.EndTurn(connId);
+            await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
             await Broadcast();
             TriggerIfAi();
             return;
         }
 
-        await Delay(1000, 2000);
+        await Delay(2000, 3000);
 
         // Find territory with >1 army that has adjacent owned territory
         var sources = state.Territories
@@ -193,11 +197,13 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
             var target = targets[Random.Shared.Next(targets.Count)];
             int armies = Random.Shared.Next(1, source.Armies);
             game.Fortify(connId, source.Id, target.Id, armies);
+            await hub.Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
             await Broadcast();
         }
 
-        await Delay(500);
+        await Delay(1000, 1500);
         game.EndTurn(connId);
+        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
         TriggerIfAi();
     }

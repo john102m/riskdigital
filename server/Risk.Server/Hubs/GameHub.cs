@@ -47,7 +47,9 @@ public class GameHub : Hub
 
     public async Task PlaceArmy(int territoryId)
     {
+        var playerIndex = _game.State!.CurrentPlayerIndex;
         var state = _game.PlaceArmy(Context.ConnectionId, territoryId);
+        await Clients.All.SendAsync("ArmiesPlaced", playerIndex, territoryId, 1);
         await BroadcastState(state);
         _ai.TriggerIfAi();
     }
@@ -55,6 +57,7 @@ public class GameHub : Hub
     public async Task Reinforce(int territoryId)
     {
         var state = _game.Reinforce(Context.ConnectionId, territoryId);
+        await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, 1);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;
@@ -114,6 +117,7 @@ public class GameHub : Hub
     public async Task EndTurn()
     {
         var state = _game.EndTurn(Context.ConnectionId);
+        await Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await BroadcastState(state);
         _ai.TriggerIfAi();
     }
@@ -121,6 +125,7 @@ public class GameHub : Hub
     public async Task Fortify(int sourceId, int targetId, int armies)
     {
         var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        await Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;

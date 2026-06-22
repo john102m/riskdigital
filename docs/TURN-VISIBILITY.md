@@ -113,6 +113,14 @@ These are the punctuation marks. The panel is the running sentence.
 
 ### Feed Content by Phase
 
+**Initial Placement:**
+```
+🟢 Alice placed 1 on Ukraine
+🟢 Bob placed 1 on Brazil
+🟢 Alice placed 1 on Siam
+```
+Same dot pulse as reinforce — circle grows/shrinks on the placed territory. Players take turns one-at-a-time, so you see each placement land.
+
 **Reinforce:**
 ```
 🟢 Alice placed 3 armies on Ukraine
