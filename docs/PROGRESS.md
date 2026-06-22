@@ -425,3 +425,40 @@
 ---
 
 *Updated: 2026-06-22*
+
+---
+
+## 2026-06-22 Late Afternoon — Z440 Setup
+
+### Hardware Assembled
+
+- **WiFi card installed** — Intel AX210 PCIe, both antenna connected, USB header for Bluetooth connected. Working on 5GHz (had to set Preferred Band in Device Manager → Advanced after it defaulted to 2.4GHz).
+- **1TB HDD installed** — SATA data cable (D1/D2 daisy chain), borrowed power connector from CD drive (original connector was dead). Drive detected, labelled, working.
+- **Dual monitors** — both on DisplayPort with DP-to-HDMI adapters. Required NVIDIA Quadro K2200 driver (Windows 11 doesn't bundle it — only shows Basic Display Adapter until manually installed). Third monitor available via DVI port.
+- **2 RAM slots free** — 4x 8GB = 32GB currently, room for 48GB or 64GB later.
+
+### Software Started
+
+- Git installed + SSH key generated and added to GitHub
+- Ready for: .NET 8 SDK, Node.js LTS, VS2022, Unity Hub, VS Code
+
+### Docs Created/Updated This Session
+
+- `docs/HANDSET-UI-IMPROVEMENTS.md` — design doc with analysis + priority ranking
+- `docs/DEV-SETUP.md` — full project dev environment setup for fresh machine
+- `docs/PLAYER-GUIDE.md` — onboarding guide for playtesters (rules, UI, tactics)
+- `docs/PROGRESS.md` — this file
+- `docs/PLAYTEST-NOTES.md` — colour picker noted
+- `docs/IDEAS.md` — sound effects list added
+
+### Notes for Next Session (from Z440)
+
+- Clone repo: `git clone git@github.com:<username>/riskdigital.git`
+- Follow `docs/DEV-SETUP.md` for remaining software installs
+- This chat has full context of the project — new session on Z440 will need to catch up via `/docs` or reading PROGRESS.md
+- Handset UI improvements branch is active with all 6 changes implemented + TV tweaks (activity coalescing, bold text, placement turn popup)
+- Build verified clean: `cd handset && npx tsc --noEmit` passes
+
+---
+
+*Updated: 2026-06-22 18:23*
