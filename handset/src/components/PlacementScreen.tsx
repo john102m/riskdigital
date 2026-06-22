@@ -19,6 +19,15 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
 
   const [expanded, setExpanded] = useState<string | null>(() => groupByContinent(myTerritories)[0]?.continent ?? null);
 
+  if (!isMyTurn) {
+    return (
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Placing armies</span>
+      </div>
+    );
+  }
+
   const placeArmy = async (territoryId: number) => {
     try {
       await connection.invoke("PlaceArmy", territoryId);
@@ -28,21 +37,11 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
   };
 
   return (
-    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-4">
-      <div className="text-center mb-4">
-        <div className="flex items-center justify-center">
-          <span className="pb-2 px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider" style={{ backgroundColor: me.colour, color: '#fff' }}>
-            Initial Placement
-          </span>
-        </div>
-        {isMyTurn ? (
-          <p className="text-lg font-bold text-green-400">Your turn — place an army</p>
-        ) : (
-          <p className="text-lg text-gray-400">
-            Waiting for <span style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
-          </p>
-        )}
-        <p className="text-sm text-gray-500 mt-1">{me.reinforcementsRemaining} armies remaining</p>
+    <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
+      <div className="text-center mb-2 min-h-[33px] flex items-center justify-center">
+        <span className="px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider" style={{ backgroundColor: me.colour, color: '#fff' }}>
+          Place army · {me.reinforcementsRemaining} left
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-2">
@@ -54,10 +53,8 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
             <button
               key={t.id}
               onClick={() => placeArmy(t.id)}
-              disabled={!isMyTurn}
-              style={isMyTurn ? { backgroundColor: me.colour + "33" } : {}}
-              className={`px-3 py-2 rounded text-sm flex justify-between items-center border border-white/10 w-full
-                ${isMyTurn ? "active:brightness-125" : "bg-gray-800/50 opacity-50"}`}
+              style={{ backgroundColor: me.colour + "33" }}
+              className="px-3 py-2 rounded text-sm flex justify-between items-center border border-white/10 w-full active:brightness-125"
             >
               <span className="font-medium truncate">{t.name}</span>
               <span className="font-bold ml-1">{t.armies}</span>

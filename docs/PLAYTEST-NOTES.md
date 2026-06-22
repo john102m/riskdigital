@@ -72,3 +72,7 @@ Jot issues, tweaks, and ideas here during play. We'll batch them up after.
 - [ ] Bot Alice attack glow not showing on TV — investigate `AttackSelection` broadcast from AiService vs handset `SelectAttack` (may be event name mismatch or null handling)
 - [ ] TV board needs an attack notification modal/banner for ALL players — "PlayerName is attacking X from Y" so everyone can follow the action without squinting at dots
 - [ ] TV board should show active player + phase info prominently — "John is placing armies" / "Bot Alice is attacking" / "Waiting for Dave to fortify" — so everyone knows why they're waiting
+
+## 2026-06-22 — Handset UI session
+
+- **Colour picker in lobby** — let players choose from the 6 predefined colours (Red/Blue/Green/Yellow/Purple/Orange) instead of auto-assigning by join order. John always picks green.

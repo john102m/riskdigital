@@ -122,11 +122,11 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       setAwaitingMove(false);
       setLastResult(null);
       setBlitzSummary(null);
-      // Find strongest remaining source's continent to auto-open
-      const remaining = sources.map(t => ({ ...t, armies: t.id === mSource ? t.armies - moveArmies : t.armies })).filter(t => t.armies > 1);
-      const strongest = remaining.sort((a, b) => b.armies - a.armies)[0];
       setSourceId(null);
       setTargetId(null);
+      // Re-open strongest source's continent for next attack pick
+      const remaining = sources.filter(t => t.id !== mSource && t.armies > 1);
+      const strongest = remaining.sort((a, b) => b.armies - a.armies)[0];
       setExpanded(strongest?.continent ?? "__init__");
     } catch (e: any) {
       alert(e.message);
@@ -154,19 +154,9 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
 
   if (!isMyTurn) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-        <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: currentPlayer.colour }}>
-          Attack
-        </span>
-        <p className="text-lg text-gray-400 mt-4">
-          <span style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span> is attacking
-        </p>
-        {lastResult && (
-          <div className="mt-4 text-center text-sm text-gray-400">
-            🎲 {lastResult.attackerDice.join(", ")} vs {lastResult.defenderDice.join(", ")}
-            {lastResult.captured && " — Captured!"}
-          </div>
-        )}
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Attacking</span>
       </div>
     );
   }
@@ -201,8 +191,8 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   }
 
   return (
-    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-4">
-      <div className="text-center mb-3">
+    <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
+      <div className="flex items-center justify-center mb-2 min-h-[33px] mx-10">
         <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: me.colour }}>
           Attack
         </span>
@@ -225,23 +215,34 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       )}
 
       {/* Source picker */}
-      <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Attack from:</p>
-      <div className="mb-3">
-        <ContinentAccordion
-          territories={sources}
-          expanded={expanded}
-          onToggle={(c) => setExpanded((e) => e === c ? null : c)}
-          renderButton={(t) => (
-            <button
-              key={t.id}
-              onClick={() => { setSourceId(sourceId === t.id ? null : t.id); setTargetId(null); }}
-              className={`px-3 py-2 rounded text-sm ${sourceId === t.id ? "bg-green-600" : "bg-gray-700"}`}
-            >
-              {t.name} ({t.armies})
-            </button>
-          )}
-        />
-      </div>
+      {sourceId === null ? (
+        <>
+          <p className="text-xs text-gray-400 uppercase mb-1 font-medium">Attack from:</p>
+          <div className="mb-3 flex-1 overflow-y-auto">
+            <ContinentAccordion
+              territories={sources}
+              expanded={expanded}
+              onToggle={(c) => setExpanded((e) => e === c ? null : c)}
+              renderButton={(t) => (
+                <button
+                  key={t.id}
+                  onClick={() => { setSourceId(t.id); setTargetId(null); }}
+                  className="px-3 py-2 rounded text-sm bg-gray-700"
+                >
+                  {t.name} ({t.armies})
+                </button>
+              )}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-green-700 flex items-center gap-1">
+            🟢 {selectedSource?.name} ({selectedSource?.armies})
+            <button onClick={() => { setSourceId(null); setTargetId(null); }} className="ml-1 text-white/60 hover:text-white">✕</button>
+          </span>
+        </div>
+      )}
 
       {/* Target picker */}
       {sourceId !== null && (
@@ -261,36 +262,29 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
         </>
       )}
 
-      {/* Dice picker + Attack button */}
+      {/* Attack buttons */}
       {sourceId !== null && targetId !== null && (
-        <div className="mb-3 flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <p className="text-xs text-gray-400">Dice:</p>
-            {[1, 2, 3].map((d) => (
-              <button
-                key={d}
-                disabled={d > maxDice}
-                onClick={() => setDiceCount(d)}
-                className={`px-3 py-2 rounded font-bold ${d === diceCount ? "bg-amber-600" : "bg-gray-700"} ${d > maxDice ? "opacity-30" : ""}`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
-              ⚔️ Attack
-            </button>
-            <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
-              ⚡ Blitz
-            </button>
-          </div>
+        <div className="mb-3 flex gap-2">
+          <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
+            ⚔️ {effectiveDice}🎲
+          </button>
+          <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
+            ⚡ Blitz
+          </button>
+          {maxDice > 1 && (
+            <div className="flex gap-1">
+              {[1, 2, 3].filter(d => d <= maxDice && d !== effectiveDice).map((d) => (
+                <button key={d} onClick={() => setDiceCount(d)} className="px-2 py-2 rounded bg-gray-700 text-xs font-bold">
+                  {d}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Done button */}
       <button onClick={endAttack} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
-        Done Attacking → Fortify
+        Done → Fortify
       </button>
     </div>
   );

@@ -13,7 +13,7 @@ export function MissionBadge({ mission }: { mission: Mission | null }) {
     <>
       <button
         onClick={() => setShow(!show)}
-        className="fixed top-2 left-2 z-50 min-w-[44px] min-h-[44px] flex items-center justify-center rounded bg-gray-800 border border-gray-700 text-base"
+        className="fixed top-2 left-2 z-50 min-w-[33px] min-h-[33px] flex items-center justify-center rounded bg-gray-800 border border-gray-700 text-sm"
       >
         🎯
       </button>

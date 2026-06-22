@@ -380,3 +380,85 @@
 ---
 
 *Updated: 2026-06-21 20:57*
+
+---
+
+## 2026-06-22 — Handset UI Improvements & TV Tweaks
+
+### Completed
+
+- **Minimal waiting screens** — all 4 phases (Placement, Reinforce, Attack, Fortify) now show only current player's coloured name + phase label when not your turn. No accordions, no buttons, no territory lists.
+- **Coloured top border** — 3px border in current player's colour on all waiting screens for instant identification.
+- **Chip-collapse source picker (Attack)** — after selecting source, accordion collapses to compact chip `🟢 Brazil (8) ✕`. Tap ✕ to reselect.
+- **Chip-collapse source picker (Fortify)** — same pattern applied.
+- **Must-trade = card panel only** — when forced to trade (5+ cards), Reinforce screen shows only the card panel. No territory list cluttering the view.
+- **Default max dice + merged buttons** — Attack button now shows dice count inline `⚔️ 3🎲`. Small override toggles only appear when maxDice > 1. Saves an entire row.
+- **Compact single-line headers** — all phases use tight header rows. Attack/Fortify phase badges centred with action buttons (`Done → Fortify`, `Skip → End`) pinned at bottom.
+- **Badge size reduction** — 🎯 and 📊 badges reduced to 75% (33px) to fit alongside headers on one line.
+- **Header alignment** — headers aligned vertically with fixed badges using `pt-2` + `min-h-[33px]`.
+- **TV activity feed coalescing** — repeated placements to same territory now bump count (`+3 Western US`) instead of 3 separate lines.
+- **TV activity feed bold text** — better readability on TV.
+- **TV turn popup during Initial Placement** — shows `"John's turn"` popup (in player colour) when active player changes, with 1.2s delay for animation clearance.
+- **HANDSET-UI-IMPROVEMENTS.md** — design doc created with full analysis and priority ranking.
+
+### Bug Fixes
+
+- Fixed header overlapping fixed mission/status badges (pt-14 → pt-2 + alignment)
+- Fixed Fortify stray `</div>` from action button refactor
+
+### Files Changed
+
+- `handset/src/components/PlacementScreen.tsx`
+- `handset/src/components/ReinforceScreen.tsx`
+- `handset/src/components/AttackScreen.tsx`
+- `handset/src/components/FortifyScreen.tsx`
+- `handset/src/components/MissionBadge.tsx`
+- `handset/src/components/StatusBadge.tsx`
+- `server/Risk.Server/wwwroot/tv.html`
+- `docs/HANDSET-UI-IMPROVEMENTS.md` (new)
+- `docs/PLAYTEST-NOTES.md`
+
+### Hardware
+
+- **Z440 workstation arrived!** Next session will be from the new machine after full setup (VS2022, Unity, Node, Git, etc.)
+
+---
+
+*Updated: 2026-06-22*
+
+---
+
+## 2026-06-22 Late Afternoon — Z440 Setup
+
+### Hardware Assembled
+
+- **WiFi card installed** — Intel AX210 PCIe, both antenna connected, USB header for Bluetooth connected. Working on 5GHz (had to set Preferred Band in Device Manager → Advanced after it defaulted to 2.4GHz).
+- **1TB HDD installed** — SATA data cable (D1/D2 daisy chain), borrowed power connector from CD drive (original connector was dead). Drive detected, labelled, working.
+- **Dual monitors** — both on DisplayPort with DP-to-HDMI adapters. Required NVIDIA Quadro K2200 driver (Windows 11 doesn't bundle it — only shows Basic Display Adapter until manually installed). Third monitor available via DVI port.
+- **2 RAM slots free** — 4x 8GB = 32GB currently, room for 48GB or 64GB later.
+
+### Software Started
+
+- Git installed + SSH key generated and added to GitHub
+- Ready for: .NET 8 SDK, Node.js LTS, VS2022, Unity Hub, VS Code
+
+### Docs Created/Updated This Session
+
+- `docs/HANDSET-UI-IMPROVEMENTS.md` — design doc with analysis + priority ranking
+- `docs/DEV-SETUP.md` — full project dev environment setup for fresh machine
+- `docs/PLAYER-GUIDE.md` — onboarding guide for playtesters (rules, UI, tactics)
+- `docs/PROGRESS.md` — this file
+- `docs/PLAYTEST-NOTES.md` — colour picker noted
+- `docs/IDEAS.md` — sound effects list added
+
+### Notes for Next Session (from Z440)
+
+- Clone repo: `git clone git@github.com:<username>/riskdigital.git`
+- Follow `docs/DEV-SETUP.md` for remaining software installs
+- This chat has full context of the project — new session on Z440 will need to catch up via `/docs` or reading PROGRESS.md
+- Handset UI improvements branch is active with all 6 changes implemented + TV tweaks (activity coalescing, bold text, placement turn popup)
+- Build verified clean: `cd handset && npx tsc --noEmit` passes
+
+---
+
+*Updated: 2026-06-22 18:23*

@@ -61,3 +61,45 @@ All the "could do" items in one place. Not commitments — just the full menu.
 ---
 
 *Living document — add ideas as they come up.*
+
+## Sound Effects Needed
+
+### Have (from Flutter)
+- ✅ Dice roll
+- ✅ Card swipe
+
+### Need — TV Board
+
+| Sound | Trigger | Notes |
+|-------|---------|-------|
+| Army placed (thud/stamp) | ArmiesPlaced | Subtle, repeats often. Short. |
+| Territory captured (fanfare/clash) | Capture detected | Satisfying, brief |
+| Blitz (rapid drums/gunfire) | BlitzResult | Longer, builds tension |
+| Player eliminated (dramatic sting) | PlayerEliminated | Dark, final |
+| Turn start (drum tap/horn) | TurnStarted | Quick attention-grab |
+| Card traded (coin/cash register) | CardTraded | Rewarding |
+| Fortify (march/boots) | FortifyMoved | Troops moving |
+| Game over / victory (trumpet fanfare) | MissionComplete / GameOver | Big, triumphant |
+| Game start (war horn/bugle) | StartGame | Sets the tone |
+| Timer warning (tick/clock) | Turn timer threshold | Subtle pressure |
+
+### Need — Handset (optional, lower priority)
+
+| Sound | Trigger | Notes |
+|-------|---------|-------|
+| Your turn (notification ping) | Phase becomes your turn | Distinct, attention |
+| Button tap (click) | Any action button | Subtle feedback |
+| Error/invalid (buzz) | Failed action | Short negative |
+| Capture celebration (short chime) | You captured a territory | Positive feedback |
+
+### Sources (free/CC0)
+- freesound.org — search by keyword, filter CC0
+- mixkit.co — free SFX library
+- pixabay.com/sound-effects — no attribution needed
+- Record your own dice with phone mic (authentic!)
+
+### Format
+- MP3 or OGG for web (tv.html + handset)
+- WAV/OGG for Unity TV app
+- Keep files short (<2s for most, <5s for fanfares)
+- Normalise volume across all clips
