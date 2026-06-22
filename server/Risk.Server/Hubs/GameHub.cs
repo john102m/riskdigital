@@ -7,10 +7,12 @@ namespace Risk.Server.Hubs;
 public class GameHub : Hub
 {
     private readonly GameService _game;
+    private readonly AiService _ai;
 
-    public GameHub(GameService game)
+    public GameHub(GameService game, AiService ai)
     {
         _game = game;
+        _ai = ai;
     }
 
     public async Task CreateGame(string playerName)
@@ -25,21 +27,29 @@ public class GameHub : Hub
         await BroadcastState(state);
     }
 
+    public async Task AddAI()
+    {
+        var state = _game.AddAiPlayer(Context.ConnectionId);
+        await BroadcastState(state);
+    }
+
     public async Task StartGame()
     {
         var state = _game.StartGame(Context.ConnectionId);
         await BroadcastState(state);
         if (state.HouseRules.UseMissions)
         {
-            foreach (var p in state.Players.Where(p => p.Mission is not null))
+            foreach (var p in state.Players.Where(p => p.Mission is not null && !p.IsAI))
                 await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
         }
+        _ai.TriggerIfAi();
     }
 
     public async Task PlaceArmy(int territoryId)
     {
         var state = _game.PlaceArmy(Context.ConnectionId, territoryId);
         await BroadcastState(state);
+        _ai.TriggerIfAi();
     }
 
     public async Task Reinforce(int territoryId)
@@ -105,6 +115,7 @@ public class GameHub : Hub
     {
         var state = _game.EndTurn(Context.ConnectionId);
         await BroadcastState(state);
+        _ai.TriggerIfAi();
     }
 
     public async Task Fortify(int sourceId, int targetId, int armies)

@@ -18,12 +18,20 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-6 pt-16">
-      <p className="text-gray-500 text-sm uppercase tracking-wider">Game Code</p>
-      <p className="text-5xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
+  const addAI = async () => {
+    try {
+      await connection.invoke("AddAI");
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
-      <div className="mt-10 w-full max-w-xs">
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 pt-8">
+      <p className="text-gray-500 text-sm uppercase tracking-wider">Game Code</p>
+      <p className="text-3xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
+
+      <div className="mt-4 w-full max-w-xs">
         <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Players</p>
         <ul className="space-y-2">
           {gameState.players.map((p) => (
@@ -31,21 +39,31 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
               <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: p.colour }} />
               <span className="font-medium text-lg">{p.name}</span>
               {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
+              {p.isAI && <span className="ml-auto text-xs text-gray-500">🤖</span>}
             </li>
           ))}
         </ul>
       </div>
 
-      <p className="mt-6 text-sm text-gray-500">
+      <p className="mt-4 text-sm text-gray-500">
         {gameState.players.length < 2
           ? "Waiting for 1 more player..."
           : `${gameState.players.length} players — ready to conquer 🌍`}
       </p>
 
-      {isHost && gameState.players.length >= 2 && (
-        <button onClick={startGame} className="mt-8 bg-green-600 hover:bg-green-700 px-8 py-4 rounded-lg text-xl font-bold transition">
-          Start Game
-        </button>
+      {isHost && (
+        <div className="mt-4 flex flex-col gap-3 items-center">
+          {gameState.players.length < 6 && (
+            <button onClick={addAI} className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-bold transition">
+              🤖 Add AI Player
+            </button>
+          )}
+
+            <button onClick={startGame} className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg text-xl font-bold transition">
+              Start Game
+            </button>
+
+        </div>
       )}
     </div>
   );

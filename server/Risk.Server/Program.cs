@@ -11,6 +11,7 @@ builder.Services.AddSignalR()
     });
 builder.Services.AddSingleton<GameService>();
 
+builder.Services.AddSingleton<AiService>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
