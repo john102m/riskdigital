@@ -21,9 +21,9 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     }
   };
 
-  const addAI = async () => {
+  const addAI = async (tier: number) => {
     try {
-      await connection.invoke("AddAI");
+      await connection.invoke("AddAI", tier);
     } catch (e: any) {
       alert(e.message);
     }
@@ -49,7 +49,7 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
               <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
               <span className="font-medium">{p.name}</span>
               {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
-              {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖</span>}
+              {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖 Tier-{p.aiTier}</span>}
               {p.isAI && isHost && (
                 <button onClick={() => removeAI(i)} className="ml-auto text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-red-900/30">✕</button>
               )}
@@ -67,9 +67,14 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
       {isHost && (
         <div className="mt-4 flex flex-col gap-3 items-center">
           {gameState.players.length < 6 && (
-            <button onClick={addAI} className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-bold transition">
-              🤖 Add AI Player
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => addAI(1)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                🤖 Tier-1
+              </button>
+              <button onClick={() => addAI(2)} className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                ⚔️ Tier-2
+              </button>
+            </div>
           )}
 
             <button onClick={startGame} className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg text-xl font-bold transition">

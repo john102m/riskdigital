@@ -35,9 +35,9 @@ public class GameHub : Hub
         await BroadcastLobbyStatus();
     }
 
-    public async Task AddAI()
+    public async Task AddAI(int tier = 2)
     {
-        var state = _game.AddAiPlayer(Context.ConnectionId);
+        var state = _game.AddAiPlayer(Context.ConnectionId, tier);
         await BroadcastState(state);
         await BroadcastLobbyStatus();
     }

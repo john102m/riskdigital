@@ -87,7 +87,7 @@ public class GameService
     private static readonly int[] FemaleAvatars = [0, 1, 2, 3, 4, 5];
     private static readonly int[] MaleAvatars = [6, 7, 8];
 
-    public GameState AddAiPlayer(string connectionId)
+    public GameState AddAiPlayer(string connectionId, int tier = 2)
     {
         if (_state is null || _state.Phase != GamePhase.Lobby)
             throw new HubException("Not in lobby.");
@@ -118,7 +118,8 @@ public class GameService
             Name = name,
             Colour = colour,
             AvatarIndex = avatar,
-            IsAI = true
+            IsAI = true,
+            AiTier = Math.Clamp(tier, 1, 2)
         });
 
         return _state;

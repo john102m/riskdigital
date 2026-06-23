@@ -10,6 +10,7 @@ export interface Player {
   reinforcementsRemaining: number;
   isEliminated: boolean;
   isAI: boolean;
+  aiTier: number;
   cardCount: number;
 }
 
