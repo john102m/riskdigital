@@ -70,6 +70,7 @@ public class Player
     public bool EarnedCardThisTurn { get; set; }
     public bool IsEliminated { get; set; }
     public bool IsAI { get; set; }
+    public int AiTier { get; set; } = 1;
     [JsonIgnore]
     public Mission? Mission { get; set; }
 }
