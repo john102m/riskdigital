@@ -4,6 +4,7 @@ import { Card, GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { CardTradePanel } from "./CardTradePanel";
+import { tap, heavyTap } from "../utils/vibrate";
 
 function hasTradeableSet(cards: Card[]): boolean {
   if (cards.length < 3) return false;
@@ -58,9 +59,9 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     );
   }
 
-  const reinforce = async (territoryId: number) => {
+  const reinforce = async (territoryId: number, count: number = 1) => {
     try {
-      await connection.invoke("Reinforce", territoryId);
+      await connection.invoke("Reinforce", territoryId, count);
     } catch (e: any) {
       alert(e.message);
     }
@@ -115,17 +116,28 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
           expanded={expanded}
           onToggle={(c) => setExpanded((e) => e === c ? null : c)}
           renderButton={(t) => (
-            <button
-              key={t.id}
-              onClick={() => reinforce(t.id)}
-              disabled={me.reinforcementsRemaining <= 0}
-              style={{ backgroundColor: me.colour + "33" }}
-              className={`w-full text-left px-2 py-2 rounded flex justify-between items-center border border-white/10
-                ${me.reinforcementsRemaining > 0 ? "active:brightness-125" : "opacity-50"}`}
-            >
-              <span className="font-medium text-sm truncate">{t.name}</span>
-              <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
-            </button>
+            <div key={t.id} className="flex items-center gap-1 w-full">
+              <button
+                onClick={() => { tap(); reinforce(t.id, 1); }}
+                onContextMenu={(e) => e.preventDefault()}
+                disabled={me.reinforcementsRemaining <= 0}
+                className={`w-[70%] text-left px-2 py-2 rounded-l flex justify-between items-center border border-white/10 touch-manipulation
+                  ${me.reinforcementsRemaining > 0 ? "active:scale-95 active:brightness-150 transition-all" : "opacity-50"}`}
+                style={{ backgroundColor: me.colour + "33" }}
+              >
+                <span className="font-medium text-sm truncate">{t.name}</span>
+                <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
+              </button>
+              <button
+                onClick={() => { heavyTap(); reinforce(t.id, me.reinforcementsRemaining); }}
+                onContextMenu={(e) => e.preventDefault()}
+                disabled={me.reinforcementsRemaining <= 0}
+                className={`w-[30%] px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 active:scale-95 active:brightness-150 transition-all touch-manipulation
+                  ${me.reinforcementsRemaining <= 0 ? "opacity-50" : ""}`}
+              >
+                All
+              </button>
+            </div>
           )}
         />
       </div>

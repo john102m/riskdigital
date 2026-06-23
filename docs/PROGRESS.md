@@ -462,3 +462,82 @@
 ---
 
 *Updated: 2026-06-22 18:23*
+
+---
+
+## 2026-06-23 Morning — Deploy All, Bug Fixes, TV Polish
+
+### Completed
+
+- **Deploy All button (Reinforce + Placement)** — territory buttons split into 70/30 layout: left tap = place 1, right "All" = place all remaining. Always visible, consistent layout.
+- **Server count parameter** — `Reinforce(territoryId, count)` and `PlaceArmy(territoryId, count)` now accept optional count (default 1). Returns `(GameState, int Placed)` tuple. Single round-trip for bulk placement.
+- **Haptic feedback** — `tap()` = 40ms buzz on +1, `heavyTap()` = 100ms buzz on All. Increased from 10/30ms (too short to feel on Android Chrome).
+- **Active shade fix** — replaced invisible `active:brightness-125` on tinted backgrounds with `active:bg-white/30` — visible white overlay on press regardless of player colour.
+- **Attack glow not cleared (bug fix)** — TV now clears glow when `turnPhase !== 'Attack'` on every state update. Stored selection reset.
+- **AI attack glow not showing (bug fix)** — extracted `applyGlow()` function with stored source/target. Re-applied after every territory DOM render to fix race condition where `AttackSelection` event arrived before territories existed in DOM.
+- **Glow pulsing animation** — source (green) and target (red) dots now pulse (scale 1→1.2) with bigger box-shadow (18px 8px). Fixes green glow invisible on green map areas.
+- **Dice → capture sound sequence** — `CombatResult` now plays dice sound first, then capture fanfare after 1s delay (was playing capture immediately, skipping dice). Matches existing `BlitzResult` pattern.
+- **Attack selection thud on TV** — plays placement thud sound when attacker selects source or target, giving audio feedback on the TV that someone is choosing.
+
+### Bug Fixes
+
+- Attack glow persisted after turn ended (Fortify/Reinforce/next player) — never cleared
+- AI bot glow not appearing — timing race, `AttackSelection` arrived before `GameStateUpdated` rendered territory DOM elements
+- Glow animation shifted dots (transform: scale without preserving translate(-50%, -50%)) — fixed in keyframes
+- Haptic not felt on Android Chrome (10ms too short, bumped to 40/100ms)
+- `active:brightness-125` invisible on faint colour-tinted buttons
+
+### Files Changed
+
+- `server/Risk.Server/Services/GameService.cs` — count param on Reinforce + PlaceArmy, tuple returns
+- `server/Risk.Server/Hubs/GameHub.cs` — count param passed through, broadcast actual placed count
+- `server/Risk.Server/wwwroot/tv.html` — glow clear on phase change, applyGlow(), pulse animation, dice→capture sequence, selection thud
+- `handset/src/components/ReinforceScreen.tsx` — split button 70/30, active:bg-white/30, heavyTap
+- `handset/src/components/PlacementScreen.tsx` — split button 70/30, active:bg-white/30, heavyTap
+- `handset/src/utils/vibrate.ts` — tap() 40ms, heavyTap() 100ms
+
+---
+
+*Updated: 2026-06-23*
+
+---
+
+## 2026-06-23 Continued — Lobby Flow, Avatars, TV Polish, Deploy Prep
+
+### Completed
+
+- **TV splash screen** — Risk logo + "Waiting for game..." when no game exists. No more black screen.
+- **TV lobby screen** — shows game code + player list (avatars, colours, host badge, bot icon) in 3-column grid.
+- **LobbyStatus broadcast** — pushed to all clients on CreateGame/JoinGame/AddAI. Other handsets auto-update without refresh.
+- **Remove AI** — host can tap ✕ next to AI players in lobby. Server validates host-only, lobby-only, AI-only.
+- **Colour picker** — 6 colour circles on ConnectScreen. Server validates colour not already taken on join.
+- **Avatar picker** — 9 avatar thumbnails on ConnectScreen. Persisted in localStorage.
+- **Avatars everywhere** — lobby player list, TV info panel, activity feed, turn popups, phase announcements.
+- **Lobby vertical space** — tightened padding, removed heading, smaller code text, compact rows.
+- **Phase announcements on TV** — "🏰 Place your armies!" (Lobby→Placement) and "⚔️ Game on!" (Placement→Playing) with avatar + sound.
+- **Suppress duplicate turn popup** — first turn after phase announcement doesn't get redundant "X's turn".
+- **Game-over auto-dismiss** — big winner overlay for 10s, then shrinks to small badge in top-right corner.
+- **Game-over cleared on new game** — overlay removed when Lobby phase starts.
+- **Phase shown in info box** — "Connected 4456 · Reinforce" etc.
+- **Random starting player** — no longer always the host.
+- **Standard starting armies** — restored to 40/35/30/25/20. Debug mode via `/admin/reset?debug=true` for reduced armies.
+- **Blitz fail sound** — plays `fail.mp3` after 1s delay when blitz doesn't capture.
+- **Attack selection sound dedup** — alert only plays when source+target pair actually changes (no repeat on same pair).
+- **Clean /tv URL** — `http://server:5000/tv` serves tv.html without .html extension.
+- **FILE-MAP.md** — full project file map with descriptions.
+- **PLAYER-GUIDE.md** — updated with colour/avatar picker, All button, fixed card values, all 14 missions listed, blitz warning.
+
+### Files Changed
+
+- `server/Risk.Server/Program.cs` — /tv route, /admin/debug query param, reset clears debug
+- `server/Risk.Server/Models/GameState.cs` — AvatarIndex on Player
+- `server/Risk.Server/Services/GameService.cs` — colour/avatar on Create/Join, RemoveAI, random start, standard armies + debug flag
+- `server/Risk.Server/Hubs/GameHub.cs` — colour/avatar params, RemoveAI, BroadcastLobbyStatus helper
+- `server/Risk.Server/wwwroot/tv.html` — splash, lobby screen, avatars, phase popups, suppress, game-over dismiss, fail sound, selection dedup, phase in info box
+- `handset/src/components/ConnectScreen.tsx` — colour/avatar picker, compact layout
+- `handset/src/components/LobbyScreen.tsx` — avatars, remove AI button, tighter spacing
+- `handset/src/types/game.ts` — avatarIndex on Player
+- `docs/FILE-MAP.md` — new
+- `docs/LOBBY-FLOW.md` — new
+- `docs/PLAYER-GUIDE.md` — updated
+- `docs/PROGRESS.md` — this entry

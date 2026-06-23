@@ -15,10 +15,24 @@ export default function App() {
   const { connection, gameState, cards, mission, forcedTrade, clearForcedTrade } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
   const [showMissionWelcome, setShowMissionWelcome] = useState(false);
+  const [lastTurnIndex, setLastTurnIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (mission) setShowMissionWelcome(true);
   }, [mission]);
+
+  // Vibrate when it becomes your turn
+  useEffect(() => {
+    if (!gameState) return;
+    const myIndex = gameState.players.findIndex(p => p.name === playerName);
+    const current = gameState.currentPlayerIndex;
+    if (current !== lastTurnIndex) {
+      setLastTurnIndex(current);
+      if (myIndex >= 0 && current === myIndex && navigator.vibrate) {
+        navigator.vibrate(100);
+      }
+    }
+  }, [gameState?.currentPlayerIndex]);
 
   if (!connection) {
     return (

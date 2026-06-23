@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Risk — TV Board</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
+        body { background: #000; color: #eee; font-family: system-ui, sans-serif; }
+        .map-container { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .map-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .map-overlay { position: absolute; opacity: 0; transition: opacity 0.3s; }
+        .territory { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 2.5vw; height: 2.5vw; max-width: 34px; max-height: 34px; border-radius: 50%; font-size: min(1vw, 13px); font-weight: bold; color: #fff; border: 2px solid rgba(0,0,0,0.5); text-shadow: 1px 1px 1px rgba(0,0,0,0.8); cursor: default; transition: background 0.4s, transform 0.3s; }
+        .territory:hover::after { content: attr(data-name); position: absolute; top: -22px; white-space: nowrap; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px; }
+        .territory.glow-source { box-shadow: 0 0 12px 4px #68d391; }
+        .territory.glow-target { box-shadow: 0 0 12px 4px #fc8181; }
+        .territory.pulse-grow { animation: pulseGrow 1.5s ease-in-out; }
+        .territory.pulse-shrink { animation: pulseShrink 1s ease-in-out; }
+        .territory.pulse-capture { animation: pulseCapture 2s ease-in-out; }
+        .territory.pulse-fortify-out { animation: pulseShrink 1s ease-in-out; }
+        .territory.pulse-fortify-in { animation: pulseGrow 1.5s ease-in-out; }
+        @keyframes pulseGrow { 0% { transform: translate(-50%,-50%) scale(1); } 35% { transform: translate(-50%,-50%) scale(1.5); } 100% { transform: translate(-50%,-50%) scale(1); } }
+        @keyframes pulseShrink { 0% { transform: translate(-50%,-50%) scale(1); } 35% { transform: translate(-50%,-50%) scale(0.6); } 100% { transform: translate(-50%,-50%) scale(1); } }
+        @keyframes pulseCapture { 0% { transform: translate(-50%,-50%) scale(1); } 25% { transform: translate(-50%,-50%) scale(1.6); } 55% { transform: translate(-50%,-50%) scale(0.85); } 100% { transform: translate(-50%,-50%) scale(1); } }
+        .t-label { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 8px; white-space: nowrap; color: #fff; text-shadow: 1px 1px 2px #000; margin-top: 1px; }
+
+        /* Info panel */
+        .info-panel { position: fixed; bottom: 12px; left: 24px; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 8px; padding: 10px 14px; z-index: 100; min-width: 240px; max-width: 300px; color: #451a03; }
+        .info-panel .top-line { font-size: 11px; color: #78350f; margin-bottom: 4px; }
+        .info-panel .now-playing { font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .info-panel .now-playing .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .info-panel .now-playing .timer { font-size: 12px; color: #92400e; margin-left: auto; }
+        .info-panel .activity { display: flex; flex-direction: column; gap: 2px; max-height: 80px; overflow: hidden; }
+        .info-panel .activity-line { font-size: 12px; color: #451a03; font-weight: bold; animation: slideIn 0.3s ease-out; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Central popup */
+        .central-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.88); border: 1px solid #555; border-radius: 12px; padding: 20px 32px; text-align: center; z-index: 200; font-size: 22px; font-weight: bold; animation: popIn 0.3s ease-out; pointer-events: none; }
+        @keyframes popIn { from { opacity: 0; transform: translate(-50%,-50%) scale(0.8); } to { opacity: 1; transform: translate(-50%,-50%) scale(1); } }
+        .central-popup.fade-out { animation: popOut 0.5s ease-in forwards; }
+        @keyframes popOut { to { opacity: 0; transform: translate(-50%,-50%) scale(0.9); } }
+
+        .no-game { color: #666; font-style: italic; padding: 24px; }
+
+        /* Mute toggle */
+        .mute-btn { position: fixed; bottom: 12px; right: 12px; z-index: 100; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="map-container" id="map" style="display:none;">
+        <img src="/risk-board-game-map-cropped.jpg" alt="Risk Map" />
+        <div class="map-overlay" id="map-overlay"></div>
+    </div>
+
+    <div class="info-panel" id="info-panel">
+        <div class="top-line" id="top-line">Connecting...</div>
+    </div>
+
+    <div class="mute-btn" id="mute-btn" onclick="toggleMute()">🔊</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <script>
+        // --- Audio system ---
+        let muted = false;
+        const sounds = {
+            dice:       new Audio('/sounds/dice.mp3'),
+            capture:    new Audio('/sounds/army-rank-up.mp3'),
+            blitz:      new Audio('/sounds/blitz.mp3'),
+            eliminated: new Audio('/sounds/eliminated.mp3'),
+            turn:       new Audio('/sounds/turn.mp3'),
+            card:       new Audio('/sounds/card.mp3'),
+            fortify:    new Audio('/sounds/fortify.mp3'),
+            victory:    new Audio('/sounds/victory.mp3'),
+            place:      new Audio('/sounds/place.mp3'),
+        };
+        // Preload
+        Object.values(sounds).forEach(a => { a.preload = 'auto'; a.volume = 0.7; });
+
+        function playSound(name) {
+            if (muted) return;
+            const s = sounds[name];
+            if (!s) return;
+            s.currentTime = 0;
+            s.play().catch(() => {});
+        }
+
+        // Unlock audio on first user interaction (browser autoplay policy)
+        function unlockAudio() {
+            Object.values(sounds).forEach(a => { a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {}); });
+            document.removeEventListener('click', unlockAudio);
+            document.removeEventListener('keydown', unlockAudio);
+        }
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
+
+        function toggleMute() {
+            muted = !muted;
+            document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+        }
+        const COORDS = [
+            [8.1, 15.3],[16.9, 15.8],[35, 10.3],[16, 22.9],[22.3, 25.2],[29, 24.5],
+            [16.5, 33.1],[23.3, 36.1],[16, 42.3],[23.7, 54.2],[30.9, 63],[25.9, 67.2],
+            [26.4, 75.4],[42.9, 20.3],[49.6, 20.8],[42.5, 32.6],[49.9, 32.3],[59.2, 26],
+            [42.5, 45.7],[52.4, 41.2],[45, 59.4],[53.5, 55.1],[57.7, 64.7],[54.3, 71.3],
+            [63.6, 84],[54.9, 83.4],[68.8, 22.5],[74.4, 18.3],[66.9, 35.4],[80.8, 13.8],
+            [61, 50.9],[80.4, 24.8],[72.8, 50.2],[78.1, 42.6],[80.6, 34.6],[80.3, 54.1],
+            [87.8, 13.9],[91.1, 35.6],[82.2, 69.4],[90.5, 66.7],[86.3, 82.9],[94.8, 83.5]
+        ];
+
+        const mapEl = document.getElementById('map');
+        const mapImg = mapEl.querySelector('img');
+        const mapOverlay = document.getElementById('map-overlay');
+        const infoPanel = document.getElementById('info-panel');
+        const topLine = document.getElementById('top-line');
+
+        let lastState = null;
+        let turnStart = Date.now();
+        let lastPlayerIndex = -1;
+        let activityLines = [];
+        let missionWinDesc = null;
+
+        // --- Overlay sync ---
+        function syncOverlay() {
+            if (!mapImg.naturalWidth) return;
+            const cw = window.innerWidth, ch = window.innerHeight;
+            const natRatio = mapImg.naturalWidth / mapImg.naturalHeight;
+            const containerRatio = cw / ch;
+            let w, h;
+            if (containerRatio > natRatio) { h = ch; w = h * natRatio; }
+            else { w = cw; h = w / natRatio; }
+            mapOverlay.style.width = w + 'px';
+            mapOverlay.style.height = h + 'px';
+            mapOverlay.style.left = ((cw - w) / 2) + 'px';
+            mapOverlay.style.top = ((ch - h) / 2) + 'px';
+            mapOverlay.style.opacity = '1';
+        }
+        mapImg.addEventListener('load', syncOverlay);
+        window.addEventListener('resize', syncOverlay);
+        setTimeout(syncOverlay, 100);
+        setTimeout(syncOverlay, 500);
+
+        // --- Wake lock ---
+        if (navigator.wakeLock) {
+            navigator.wakeLock.request('screen').catch(() => {});
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {});
+            });
+        }
+
+        // --- Activity feed ---
+        function addActivity(text) {
+            activityLines.push(text);
+            if (activityLines.length > 4) activityLines.shift();
+            renderActivity();
+        }
+
+        function clearActivity() {
+            activityLines = [];
+            renderActivity();
+        }
+
+        function renderActivity() {
+            const el = document.getElementById('activity-feed');
+            if (!el) return;
+            el.innerHTML = activityLines.map(l => `<div class="activity-line">${l}</div>`).join('');
+        }
+
+        // --- Central popup ---
+        let popupTimer = null;
+        function showPopup(html, duration = 3500) {
+            let el = document.getElementById('central-popup');
+            if (el) el.remove();
+            el = document.createElement('div');
+            el.id = 'central-popup';
+            el.className = 'central-popup';
+            el.innerHTML = html;
+            document.body.appendChild(el);
+            clearTimeout(popupTimer);
+            popupTimer = setTimeout(() => {
+                el.classList.add('fade-out');
+                setTimeout(() => el.remove(), 500);
+            }, duration);
+        }
+
+        // --- Dot pulse ---
+        function pulseDot(territoryId, className) {
+            const dot = document.querySelector(`.territory[data-id="${territoryId}"]`);
+            if (!dot) return;
+            dot.classList.remove(className);
+            void dot.offsetWidth; // reflow
+            dot.classList.add(className);
+            dot.addEventListener('animationend', () => dot.classList.remove(className), { once: true });
+        }
+
+        // --- Info panel render ---
+        function renderPanel() {
+            if (!lastState) {
+                infoPanel.innerHTML = `<div class="top-line" id="top-line">Connected</div>`;
+                return;
+            }
+            const s = lastState;
+            const code = s.gameCode || '';
+            const player = s.players[s.currentPlayerIndex];
+            const colour = player ? player.colour : '#999';
+            const name = player ? player.name : '?';
+
+            let html = `<div class="top-line" id="top-line">Connected ${code}</div>`;
+            html += `<div class="now-playing"><span class="dot" style="background:${colour}"></span>${name}<span class="timer" id="turn-timer">0s</span></div>`;
+            html += `<div class="activity" id="activity-feed"></div>`;
+            infoPanel.innerHTML = html;
+            renderActivity();
+        }
+
+        // --- Timer ---
+        setInterval(() => {
+            if (!lastState || lastState.phase === 'Lobby') return;
+            const el = document.getElementById('turn-timer');
+            if (el) el.textContent = Math.floor((Date.now() - turnStart) / 1000) + 's';
+        }, 1000);
+
+        // --- Territory name helper ---
+        function tName(id) {
+            return lastState?.territories?.[id]?.name || `#${id}`;
+        }
+        function pName(idx) {
+            return lastState?.players?.[idx]?.name || 'Player';
+        }
+        function pColour(idx) {
+            return lastState?.players?.[idx]?.colour || '#999';
+        }
+
+        // --- SignalR ---
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl('/gamehub')
+            .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000])
+            .build();
+
+        connection.on('GameStateUpdated', render);
+
+        let lastPlacement = { playerIndex: -1, territoryId: -1, count: 0 };
+        let lastTurnPlayer = -1;
+        connection.on('ArmiesPlaced', (playerIndex, territoryId, count) => {
+            playSound('place');
+            if (lastPlacement.playerIndex === playerIndex && lastPlacement.territoryId === territoryId) {
+                lastPlacement.count += count;
+                activityLines[activityLines.length - 1] = `<span style="color:${pColour(playerIndex)}">⬤</span> ${pName(playerIndex)} +${lastPlacement.count} ${tName(territoryId)}`;
+                renderActivity();
+            } else {
+                lastPlacement = { playerIndex, territoryId, count };
+                addActivity(`<span style="color:${pColour(playerIndex)}">⬤</span> ${pName(playerIndex)} +${count} ${tName(territoryId)}`);
+            }
+            pulseDot(territoryId, 'pulse-grow');
+            // Show turn popup when player changes (covers InitialPlacement)
+            setTimeout(() => {
+                const nextPlayer = lastState?.currentPlayerIndex;
+                if (nextPlayer !== undefined && nextPlayer !== lastTurnPlayer) {
+                    lastTurnPlayer = nextPlayer;
+                    const name = lastState?.players?.[nextPlayer]?.name || 'Player';
+                    const colour = lastState?.players?.[nextPlayer]?.colour || '#fff';
+                    showPopup(`<span style="color:${colour}">${name}'s turn</span>`, 2000);
+                }
+            }, 1200);
+        });
+
+        connection.on('FortifyMoved', (playerIndex, sourceId, targetId, armies) => {
+            playSound('fortify');
+            addActivity(`<span style="color:${pColour(playerIndex)}">⬤</span> ${pName(playerIndex)} moved ${armies}: ${tName(sourceId)} → ${tName(targetId)}`);
+            pulseDot(sourceId, 'pulse-fortify-out');
+            pulseDot(targetId, 'pulse-fortify-in');
+        });
+
+        connection.on('TroopsMovedIn', (playerIndex, sourceId, targetId, armies) => {
+            playSound('fortify');
+            pulseDot(sourceId, 'pulse-fortify-out');
+            pulseDot(targetId, 'pulse-fortify-in');
+        });
+
+        connection.on('TurnStarted', (playerIndex) => {
+            playSound('turn');
+            clearActivity();
+            lastPlacement = { playerIndex: -1, territoryId: -1, count: 0 };
+            lastTurnPlayer = playerIndex;
+            const name = lastState?.players?.[playerIndex]?.name || 'Player';
+            const colour = lastState?.players?.[playerIndex]?.colour || '#fff';
+            showPopup(`<span style="color:${colour}">${name}'s turn</span>`, 2500);
+            turnStart = Date.now();
+        });
+
+        connection.on('CombatResult', (result) => {
+            playSound(result.captured ? 'capture' : 'dice');
+            const atk = result.attackerDice.join(' ');
+            const def = result.defenderDice.join(' ');
+            addActivity(`🎲 ${atk} vs ${def}` + (result.captured ? ` — Captured!` : ` — Lost: ⚔️${result.attackerLosses} 🛡️${result.defenderLosses}`));
+            if (result.defenderLosses > 0) pulseDot(result.targetId, 'pulse-shrink');
+            if (result.attackerLosses > 0) pulseDot(result.sourceId, 'pulse-shrink');
+            if (result.captured) {
+                pulseDot(result.targetId, 'pulse-capture');
+                showPopup(`⚔️ ${pName(lastState?.currentPlayerIndex)} captures ${tName(result.targetId)}!`);
+            }
+        });
+
+        connection.on('BlitzResult', (result) => {
+            playSound(result.captured ? 'capture' : 'dice');
+            addActivity(`⚡ Blitz ${tName(result.sourceId)} → ${tName(result.targetId)}: ${result.rounds} rounds`);
+            if (result.captured) {
+                pulseDot(result.targetId, 'pulse-capture');
+                showPopup(`⚡ ${pName(lastState?.currentPlayerIndex)} blitzes ${tName(result.targetId)}!`);
+            }
+        });
+
+        connection.on('AttackSelection', (sourceId, targetId) => {
+            document.querySelectorAll('.territory.glow-source, .territory.glow-target').forEach(el => {
+                el.classList.remove('glow-source', 'glow-target');
+            });
+            if (sourceId !== null) {
+                const src = document.querySelector(`.territory[data-id="${sourceId}"]`);
+                if (src) src.classList.add('glow-source');
+            }
+            if (targetId !== null) {
+                const tgt = document.querySelector(`.territory[data-id="${targetId}"]`);
+                if (tgt) tgt.classList.add('glow-target');
+            }
+            if (sourceId !== null && targetId !== null) {
+                addActivity(`⚔️ ${pName(lastState?.currentPlayerIndex)}: ${tName(sourceId)} → ${tName(targetId)}`);
+            }
+        });
+
+        connection.on('CardTraded', (playerIndex, armies) => {
+            playSound('card');
+            showPopup(`🃏 ${pName(playerIndex)} trades cards` + (armies ? ` → +${armies} armies` : ''));
+            addActivity(`🃏 ${pName(playerIndex)} traded cards`);
+        });
+
+        connection.on('PlayerEliminated', (eliminatedIndex, byIndex) => {
+            playSound('eliminated');
+            showPopup(`💀 ${pName(eliminatedIndex)} eliminated by ${pName(byIndex)}!`, 4500);
+            addActivity(`💀 ${pName(eliminatedIndex)} eliminated!`);
+        });
+
+        connection.on('MissionComplete', (playerIndex, description) => {
+            playSound('victory');
+            missionWinDesc = description;
+        });
+
+        connection.onreconnecting(() => { topLine.textContent = 'Reconnecting...'; });
+        connection.onreconnected(() => {
+            topLine.textContent = 'Connected';
+            connection.invoke('GetState');
+        });
+
+        connection.start().then(() => {
+            topLine.textContent = 'Connected';
+            connection.invoke('GetState');
+        });
+
+        // --- Render ---
+        function render(state) {
+            lastState = state;
+            if (!state) {
+                infoPanel.innerHTML = `<div class="top-line">Connected</div>`;
+                mapEl.style.display = 'none';
+                mapOverlay.innerHTML = '';
+                var go = document.getElementById('gameover-overlay');
+                if (go) go.remove();
+                missionWinDesc = null;
+                clearActivity();
+                return;
+            }
+
+            // Track turn changes — delay panel update so animations finish
+            if (state.currentPlayerIndex !== lastPlayerIndex) {
+                const isFirstLoad = lastPlayerIndex === -1;
+                lastPlayerIndex = state.currentPlayerIndex;
+                if (isFirstLoad) {
+                    turnStart = Date.now();
+                    renderPanel();
+                } else {
+                    setTimeout(() => {
+                        turnStart = Date.now();
+                        renderPanel();
+                    }, 2000);
+                }
+            } else {
+                renderPanel();
+            }
+
+            // Game Over overlay
+            var overlay = document.getElementById('gameover-overlay');
+            if (state.phase === 'GameOver') {
+                const winner = state.players[state.currentPlayerIndex];
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'gameover-overlay';
+                    overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:999;';
+                    document.body.appendChild(overlay);
+                }
+                overlay.innerHTML = `<div style="background:rgba(0,0,0,0.9);border:1px solid #444;border-radius:12px;padding:32px 48px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;"><div style="font-size:64px">🏆</div><div style="font-size:28px;font-weight:bold;color:${winner.colour}">${winner.name} wins!</div><div style="color:#aaa;font-size:16px">${missionWinDesc || "World domination achieved"}</div></div>`;
+            } else if (overlay) {
+                overlay.remove();
+            }
+
+            if (!state.territories || !state.territories.length) {
+                mapEl.style.display = 'none';
+                return;
+            }
+
+            mapEl.style.display = 'flex';
+            syncOverlay();
+
+            // Update dots in-place (don't destroy/recreate — preserves animations)
+            state.territories.forEach(t => {
+                const [x, y] = COORDS[t.id];
+                const colour = t.ownerId >= 0 ? state.players[t.ownerId].colour : '#666';
+                let div = document.querySelector(`.territory[data-id="${t.id}"]`);
+                if (!div) {
+                    div = document.createElement('div');
+                    div.className = 'territory';
+                    div.setAttribute('data-id', t.id);
+                    div.setAttribute('data-name', t.name);
+                    div.style.left = x + '%';
+                    div.style.top = y + '%';
+                    mapOverlay.appendChild(div);
+                }
+                div.style.background = colour;
+                div.innerHTML = `${t.armies}<span class="t-label">${t.name}</span>`;
+            });
+
+            // Remove dots for territories no longer present
+            document.querySelectorAll('.territory').forEach(el => {
+                const id = parseInt(el.getAttribute('data-id'));
+                if (!state.territories.find(t => t.id === id)) el.remove();
+            });
+        }
+    </script>
+</body>
+</html>

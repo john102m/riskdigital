@@ -11,8 +11,9 @@ A digital version of the board game Risk. The TV shows the world map. You play o
 ## Getting Started
 
 1. Open the link on your phone's browser
-2. Enter your name and either create a game or join with the code shown on TV
-3. Host starts the game when everyone's in
+2. Enter your name, pick a colour and avatar
+3. Create a game or join with the code shown on TV
+4. Host can add AI players and starts the game when everyone's in
 
 ---
 
@@ -30,7 +31,7 @@ Each turn has 3 phases:
 
 #### 🟢 Reinforce
 - You get bonus armies based on: territories owned ÷ 3 (minimum 3) + continent bonuses
-- Tap a territory you own to place one army there
+- Tap a territory to place one army, or tap **All** to dump all remaining on one territory
 - Place all your armies, then tap **Done → Attack**
 
 #### 🔴 Attack
@@ -48,6 +49,7 @@ Each turn has 3 phases:
 - Auto-repeats dice rolls until you either capture the territory or are left with 1 army
 - Much faster, but you CAN'T STOP once you start
 - If the odds are close, you might burn through all your armies and end up with 1 left
+- ⚠️ Blitz uses max dice available — if you only have 2 armies, that's 1 die vs their 2. You'll likely lose!
 
 **When to use each:**
 | Situation | Use |
@@ -106,6 +108,7 @@ Each turn has 3 phases:
 
 - Earn one card per turn (if you captured a territory)
 - Trade sets of 3 for bonus armies: must be all-same type OR all-different
+- Fixed values: Infantry = 4, Cavalry = 6, Artillery = 8, One-of-each = 10
 - **Must trade** if you have 5+ cards at the start of your turn
 - Tap the 🃏 badge to see/trade your cards
 
@@ -117,6 +120,30 @@ Each turn has 3 phases:
 - Complete it to win! (e.g. "Control Europe and Australia" or "Own 18 territories with 2+ armies each")
 - Tap 📊 for progress
 - Don't tell anyone your mission!
+
+### All Mission Cards (14 total)
+
+**Continent Conquest (6):**
+- Control North America + Africa
+- Control North America + Australia
+- Control Asia + South America
+- Control Asia + Africa
+- Control Europe + South America + any third continent
+- Control Europe + Australia + any third continent
+
+**Territory Count (2):**
+- Own 18 territories with at least 2 armies on each
+- Own 24 territories (any army count)
+
+**Elimination (6):**
+- Eliminate the Red player
+- Eliminate the Blue player
+- Eliminate the Green player
+- Eliminate the Yellow player
+- Eliminate the Purple player
+- Eliminate the Orange player
+
+*If your elimination target is knocked out by someone else, your mission becomes: conquer the world (own all 42).*
 
 ---
 

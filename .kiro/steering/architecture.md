@@ -2,10 +2,10 @@
 
 ## System overview
 ```
-Phone (React) ──SignalR──▶ .NET 8 Server ◀──SignalR── Fire TV (Unity)
+Phone (React) ──SignalR──▶ .NET 8 Server ◀──SignalR── TV Board (Web or Unity)
 ```
 
-Three components communicate over SignalR WebSockets.
+Three components communicate over SignalR WebSockets. The TV board has two targets.
 
 ## Component responsibilities
 
@@ -13,7 +13,10 @@ Three components communicate over SignalR WebSockets.
 |-----------|------|----------------|
 | Server | `server/Risk.Server/` | Game state, turn logic, combat resolution, reinforcement calculation, card trading, territory graph. Single source of truth. |
 | Handset | `handset/` | Player controller — lobby, deploy troops, select attacks, trade cards, fortify. Thin client; no game logic. |
-| TV | `tv/` | Shared display — world map, army tokens, dice battles, troop movement animations. Read-only view of server state. |
+| TV (Web) | `server/wwwroot/tv.html` | Web board — any browser (Fire Stick Silk, phone, laptop). Easy family access, no install. |
+| TV (Unity) | `tv/` | Premium board — Android APK sideloaded via ADB. Dice animations, sound, polish. |
+
+Both TV targets are read-only views of server state, consuming the same SignalR events.
 
 ## Server structure
 - `Program.cs` — ASP.NET Core minimal API setup, SignalR + CORS config, static file serving.

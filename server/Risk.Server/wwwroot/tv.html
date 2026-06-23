@@ -12,8 +12,9 @@
         .map-overlay { position: absolute; opacity: 0; transition: opacity 0.3s; }
         .territory { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 2.5vw; height: 2.5vw; max-width: 34px; max-height: 34px; border-radius: 50%; font-size: min(1vw, 13px); font-weight: bold; color: #fff; border: 2px solid rgba(0,0,0,0.5); text-shadow: 1px 1px 1px rgba(0,0,0,0.8); cursor: default; transition: background 0.4s, transform 0.3s; }
         .territory:hover::after { content: attr(data-name); position: absolute; top: -22px; white-space: nowrap; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px; }
-        .territory.glow-source { box-shadow: 0 0 12px 4px #68d391; }
-        .territory.glow-target { box-shadow: 0 0 12px 4px #fc8181; }
+        .territory.glow-source { box-shadow: 0 0 18px 8px #68d391; animation: pulse-glow 1s infinite; }
+        .territory.glow-target { box-shadow: 0 0 18px 8px #fc8181; animation: pulse-glow 1s infinite; }
+        @keyframes pulse-glow { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.2); } }
         .territory.pulse-grow { animation: pulseGrow 1.5s ease-in-out; }
         .territory.pulse-shrink { animation: pulseShrink 1s ease-in-out; }
         .territory.pulse-capture { animation: pulseCapture 2s ease-in-out; }
@@ -41,6 +42,9 @@
         @keyframes popOut { to { opacity: 0; transform: translate(-50%,-50%) scale(0.9); } }
 
         .no-game { color: #666; font-style: italic; padding: 24px; }
+
+        /* Mute toggle */
+        .mute-btn { position: fixed; bottom: 12px; right: 12px; z-index: 100; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
     </style>
 </head>
 <body>
@@ -49,12 +53,62 @@
         <div class="map-overlay" id="map-overlay"></div>
     </div>
 
+    <div id="splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1a2e;color:#fff;font-family:Georgia,serif;z-index:50;">
+        <div style="font-size:72px;margin-bottom:16px;">🎲 <span style="font-size:48px;font-weight:bold;letter-spacing:4px;">RISK</span></div>
+        <div style="font-size:18px;color:#aaa;margin-top:8px;">Digital Board Game</div>
+        <div id="splash-status" style="font-size:14px;color:#666;margin-top:32px;">Connecting...</div>
+    </div>
+
     <div class="info-panel" id="info-panel">
         <div class="top-line" id="top-line">Connecting...</div>
     </div>
 
+    <div class="mute-btn" id="mute-btn" onclick="toggleMute()">🔊</div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
     <script>
+        // --- Audio system ---
+        let muted = false;
+        const sounds = {
+            dice:       new Audio('/sounds/dice.mp3'),
+            capture:    new Audio('/sounds/army-rank-up.mp3'),
+            blitz:      new Audio('/sounds/blitz.mp3'),
+            eliminated: new Audio('/sounds/eliminated.mp3'),
+            turn:       new Audio('/sounds/turn.mp3'),
+            card:       new Audio('/sounds/card.mp3'),
+            fortify:    new Audio('/sounds/fortify.mp3'),
+            victory:    new Audio('/sounds/victory.mp3'),
+            place:      new Audio('/sounds/place.mp3'),
+            alert:      new Audio('/sounds/alert.mp3'),
+            fail:       new Audio('/sounds/fail.mp3'),
+        };
+        // Preload
+        Object.values(sounds).forEach(a => { a.preload = 'auto'; a.volume = 0.7; });
+
+        function playSound(name) {
+            if (muted) return;
+            const s = sounds[name];
+            if (!s) return;
+            s.currentTime = 0;
+            s.play().catch(() => {});
+        }
+
+        // Unlock audio on first user interaction (browser autoplay policy)
+        function unlockAudio() {
+            Object.values(sounds).forEach(a => { a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {}); });
+            document.removeEventListener('click', unlockAudio);
+            document.removeEventListener('keydown', unlockAudio);
+        }
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
+
+        function toggleMute() {
+            muted = !muted;
+            document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+        }
+        const AVATARS = ["female-1", "female-2", "female-3", "female-4", "female-5", "female-6", "male-1", "male-2", "male-3"];
+        function avatarUrl(idx) { return `/avatars/${AVATARS[idx] || "female-1"}.png`; }
+
         const COORDS = [
             [8.1, 15.3],[16.9, 15.8],[35, 10.3],[16, 22.9],[22.3, 25.2],[29, 24.5],
             [16.5, 33.1],[23.3, 36.1],[16, 42.3],[23.7, 54.2],[30.9, 63],[25.9, 67.2],
@@ -74,6 +128,8 @@
         let lastState = null;
         let turnStart = Date.now();
         let lastPlayerIndex = -1;
+        let lastPhase = '';
+        let suppressNextTurnPopup = false;
         let activityLines = [];
         let missionWinDesc = null;
 
@@ -162,8 +218,8 @@
             const colour = player ? player.colour : '#999';
             const name = player ? player.name : '?';
 
-            let html = `<div class="top-line" id="top-line">Connected ${code}</div>`;
-            html += `<div class="now-playing"><span class="dot" style="background:${colour}"></span>${name}<span class="timer" id="turn-timer">0s</span></div>`;
+            let html = `<div class="top-line" id="top-line">Connected ${code} · ${s.turnPhase || s.phase}</div>`;
+            html += `<div class="now-playing"><img src="${avatarUrl(player?.avatarIndex ?? 0)}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${colour};object-fit:contain;" />${name}<span class="timer" id="turn-timer">0s</span></div>`;
             html += `<div class="activity" id="activity-feed"></div>`;
             infoPanel.innerHTML = html;
             renderActivity();
@@ -181,7 +237,9 @@
             return lastState?.territories?.[id]?.name || `#${id}`;
         }
         function pName(idx) {
-            return lastState?.players?.[idx]?.name || 'Player';
+            const p = lastState?.players?.[idx];
+            if (!p) return 'Player';
+            return `<img src="${avatarUrl(p.avatarIndex)}" style="width:16px;height:16px;border-radius:50%;display:inline-block;vertical-align:middle;border:1px solid ${p.colour};margin-right:3px;object-fit:contain;" />${p.name}`;
         }
         function pColour(idx) {
             return lastState?.players?.[idx]?.colour || '#999';
@@ -198,6 +256,7 @@
         let lastPlacement = { playerIndex: -1, territoryId: -1, count: 0 };
         let lastTurnPlayer = -1;
         connection.on('ArmiesPlaced', (playerIndex, territoryId, count) => {
+            playSound('place');
             if (lastPlacement.playerIndex === playerIndex && lastPlacement.territoryId === territoryId) {
                 lastPlacement.count += count;
                 activityLines[activityLines.length - 1] = `<span style="color:${pColour(playerIndex)}">⬤</span> ${pName(playerIndex)} +${lastPlacement.count} ${tName(territoryId)}`;
@@ -212,30 +271,60 @@
                 const nextPlayer = lastState?.currentPlayerIndex;
                 if (nextPlayer !== undefined && nextPlayer !== lastTurnPlayer) {
                     lastTurnPlayer = nextPlayer;
-                    const name = lastState?.players?.[nextPlayer]?.name || 'Player';
-                    const colour = lastState?.players?.[nextPlayer]?.colour || '#fff';
-                    showPopup(`<span style="color:${colour}">${name}'s turn</span>`, 2000);
+                    if (suppressNextTurnPopup) {
+                        suppressNextTurnPopup = false;
+                    } else {
+                        const name = lastState?.players?.[nextPlayer]?.name || 'Player';
+                        const colour = lastState?.players?.[nextPlayer]?.colour || '#fff';
+                        const av = lastState?.players?.[nextPlayer]?.avatarIndex ?? 0;
+                        showPopup(`<img src="${avatarUrl(av)}" style="width:40px;height:40px;vertical-align:middle;margin-right:8px;" /><span style="color:${colour}">${name}'s turn</span>`, 2000);
+                    }
                 }
             }, 1200);
         });
 
         connection.on('FortifyMoved', (playerIndex, sourceId, targetId, armies) => {
+            playSound('fortify');
             addActivity(`<span style="color:${pColour(playerIndex)}">⬤</span> ${pName(playerIndex)} moved ${armies}: ${tName(sourceId)} → ${tName(targetId)}`);
+            pulseDot(sourceId, 'pulse-fortify-out');
+            pulseDot(targetId, 'pulse-fortify-in');
+            lastFortified = true;
+        });
+
+        connection.on('TroopsMovedIn', (playerIndex, sourceId, targetId, armies) => {
+            playSound('fortify');
             pulseDot(sourceId, 'pulse-fortify-out');
             pulseDot(targetId, 'pulse-fortify-in');
         });
 
+        let lastFortified = false;
+
         connection.on('TurnStarted', (playerIndex) => {
+            const delay = lastFortified ? 2000 : 0;
+            lastFortified = false;
+            setTimeout(() => {
+            playSound('turn');
+            document.querySelectorAll('.territory.glow-source, .territory.glow-target').forEach(el => {
+                el.classList.remove('glow-source', 'glow-target');
+            });
             clearActivity();
             lastPlacement = { playerIndex: -1, territoryId: -1, count: 0 };
             lastTurnPlayer = playerIndex;
             const name = lastState?.players?.[playerIndex]?.name || 'Player';
             const colour = lastState?.players?.[playerIndex]?.colour || '#fff';
-            showPopup(`<span style="color:${colour}">${name}'s turn</span>`, 2500);
+            const av = lastState?.players?.[playerIndex]?.avatarIndex ?? 0;
+            if (suppressNextTurnPopup) {
+                suppressNextTurnPopup = false;
+            } else {
+                showPopup(`<img src="${avatarUrl(av)}" style="width:40px;height:40px;vertical-align:middle;margin-right:8px;" /><span style="color:${colour}">${name}'s turn</span>`, 2500);
+            }
             turnStart = Date.now();
+            }, delay);
         });
 
         connection.on('CombatResult', (result) => {
+            playSound('dice');
+            if (result.captured) setTimeout(() => playSound('capture'), 1000);
             const atk = result.attackerDice.join(' ');
             const def = result.defenderDice.join(' ');
             addActivity(`🎲 ${atk} vs ${def}` + (result.captured ? ` — Captured!` : ` — Lost: ⚔️${result.attackerLosses} 🛡️${result.defenderLosses}`));
@@ -248,6 +337,9 @@
         });
 
         connection.on('BlitzResult', (result) => {
+            playSound('dice');
+            if (result.captured) setTimeout(() => playSound('capture'), 1000);
+            else setTimeout(() => playSound('fail'), 1000);
             addActivity(`⚡ Blitz ${tName(result.sourceId)} → ${tName(result.targetId)}: ${result.rounds} rounds`);
             if (result.captured) {
                 pulseDot(result.targetId, 'pulse-capture');
@@ -255,60 +347,126 @@
             }
         });
 
-        connection.on('AttackSelection', (sourceId, targetId) => {
+        let currentAttackSource = null;
+        let currentAttackTarget = null;
+
+        function applyGlow() {
             document.querySelectorAll('.territory.glow-source, .territory.glow-target').forEach(el => {
                 el.classList.remove('glow-source', 'glow-target');
             });
-            if (sourceId !== null) {
-                const src = document.querySelector(`.territory[data-id="${sourceId}"]`);
+            if (currentAttackSource !== null) {
+                const src = document.querySelector(`.territory[data-id="${currentAttackSource}"]`);
                 if (src) src.classList.add('glow-source');
             }
-            if (targetId !== null) {
-                const tgt = document.querySelector(`.territory[data-id="${targetId}"]`);
+            if (currentAttackTarget !== null) {
+                const tgt = document.querySelector(`.territory[data-id="${currentAttackTarget}"]`);
                 if (tgt) tgt.classList.add('glow-target');
             }
-            if (sourceId !== null && targetId !== null) {
+        }
+
+        connection.on('AttackSelection', (sourceId, targetId) => {
+            const changed = sourceId !== currentAttackSource || targetId !== currentAttackTarget;
+            currentAttackSource = sourceId;
+            currentAttackTarget = targetId;
+            applyGlow();
+            if (changed && sourceId !== null && targetId !== null) {
+                playSound('alert');
                 addActivity(`⚔️ ${pName(lastState?.currentPlayerIndex)}: ${tName(sourceId)} → ${tName(targetId)}`);
             }
         });
 
         connection.on('CardTraded', (playerIndex, armies) => {
+            playSound('card');
             showPopup(`🃏 ${pName(playerIndex)} trades cards` + (armies ? ` → +${armies} armies` : ''));
             addActivity(`🃏 ${pName(playerIndex)} traded cards`);
         });
 
         connection.on('PlayerEliminated', (eliminatedIndex, byIndex) => {
+            playSound('eliminated');
             showPopup(`💀 ${pName(eliminatedIndex)} eliminated by ${pName(byIndex)}!`, 4500);
             addActivity(`💀 ${pName(eliminatedIndex)} eliminated!`);
         });
 
         connection.on('MissionComplete', (playerIndex, description) => {
+            playSound('victory');
             missionWinDesc = description;
         });
 
         connection.onreconnecting(() => { topLine.textContent = 'Reconnecting...'; });
         connection.onreconnected(() => {
             topLine.textContent = 'Connected';
+            document.getElementById('splash-status').textContent = 'Waiting for game...';
             connection.invoke('GetState');
         });
 
         connection.start().then(() => {
             topLine.textContent = 'Connected';
+            document.getElementById('splash-status').textContent = 'Waiting for game...';
             connection.invoke('GetState');
         });
 
         // --- Render ---
         function render(state) {
             lastState = state;
+            const splash = document.getElementById('splash');
             if (!state) {
                 infoPanel.innerHTML = `<div class="top-line">Connected</div>`;
                 mapEl.style.display = 'none';
                 mapOverlay.innerHTML = '';
+                splash.style.display = 'flex';
+                document.getElementById('splash-status').textContent = 'Waiting for game...';
                 var go = document.getElementById('gameover-overlay');
                 if (go) go.remove();
                 missionWinDesc = null;
+                lastPhase = '';
+                lastPlayerIndex = -1;
                 clearActivity();
                 return;
+            }
+
+            // Lobby phase — show code + players on splash screen
+            if (state.phase === 'Lobby') {
+                mapEl.style.display = 'none';
+                splash.style.display = 'flex';
+                var goLobby = document.getElementById('gameover-overlay');
+                if (goLobby) goLobby.remove();
+                const players = state.players.map(p =>
+                    `<div style="display:flex;align-items:center;gap:8px;font-size:20px;"><img src="${avatarUrl(p.avatarIndex)}" style="width:32px;height:32px;border-radius:50%;border:2px solid ${p.colour};object-fit:contain;" />${p.name}${p.isHost ? ' <span style="color:#888;font-size:12px;">HOST</span>' : ''}${p.isAI ? ' 🤖' : ''}</div>`
+                ).join('');
+                document.getElementById('splash-status').innerHTML =
+                    `<div style="font-size:18px;color:#f6ad55;letter-spacing:4px;margin-bottom:12px;">Code: <strong>${state.gameCode}</strong></div>` +
+                    `<div style="display:grid;grid-template-columns:repeat(3,auto);gap:8px 24px;justify-content:center;">${players}</div>` +
+                    `<div style="color:#666;margin-top:16px;font-size:14px;">Waiting for host to start...</div>`;
+                return;
+            }
+
+            // Active game — hide splash, show map
+            splash.style.display = 'none';
+
+            // Clear attack glow when not in attack phase
+            if (state.turnPhase !== 'Attack') {
+                currentAttackSource = null;
+                currentAttackTarget = null;
+                document.querySelectorAll('.territory.glow-source, .territory.glow-target').forEach(el => {
+                    el.classList.remove('glow-source', 'glow-target');
+                });
+            }
+
+            // Track phase changes — announce transitions
+            if (state.phase !== lastPhase) {
+                if ((lastPhase === 'Lobby' || lastPhase === '') && state.phase === 'InitialPlacement') {
+                    const p = state.players[state.currentPlayerIndex];
+                    showPopup(`🏰 Place your armies! <img src="${avatarUrl(p?.avatarIndex ?? 0)}" style="width:32px;height:32px;vertical-align:middle;margin:0 6px;" /><span style="color:${p?.colour}">${p?.name}</span> starts`, 5000);
+                    playSound('turn');
+                    suppressNextTurnPopup = true;
+                }
+                if (lastPhase === 'InitialPlacement' && state.phase === 'Playing') {
+                    const p = state.players[state.currentPlayerIndex];
+                    showPopup(`⚔️ Game on! <img src="${avatarUrl(p?.avatarIndex ?? 0)}" style="width:32px;height:32px;vertical-align:middle;margin:0 6px;" /><span style="color:${p?.colour}">${p?.name}</span> starts`, 7000);
+                    playSound('turn');
+                    suppressNextTurnPopup = true;
+                }
+                lastPhase = state.phase;
             }
 
             // Track turn changes — delay panel update so animations finish
@@ -335,8 +493,13 @@
                 if (!overlay) {
                     overlay = document.createElement('div');
                     overlay.id = 'gameover-overlay';
-                    overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:999;';
+                    overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:999;transition:opacity 1s;';
                     document.body.appendChild(overlay);
+                    // Auto-dismiss after 10s → shrink to corner badge
+                    setTimeout(() => {
+                        overlay.style.cssText = 'position:fixed;top:12px;right:12px;z-index:999;';
+                        overlay.innerHTML = `<div style="background:rgba(0,0,0,0.85);border:1px solid #444;border-radius:8px;padding:8px 16px;display:flex;align-items:center;gap:8px;"><span style="font-size:24px">🏆</span><span style="font-size:16px;font-weight:bold;color:${winner.colour}">${winner.name} wins!</span></div>`;
+                    }, 10000);
                 }
                 overlay.innerHTML = `<div style="background:rgba(0,0,0,0.9);border:1px solid #444;border-radius:12px;padding:32px 48px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;"><div style="font-size:64px">🏆</div><div style="font-size:28px;font-weight:bold;color:${winner.colour}">${winner.name} wins!</div><div style="color:#aaa;font-size:16px">${missionWinDesc || "World domination achieved"}</div></div>`;
             } else if (overlay) {
@@ -374,6 +537,9 @@
                 const id = parseInt(el.getAttribute('data-id'));
                 if (!state.territories.find(t => t.id === id)) el.remove();
             });
+
+            // Re-apply glow after territory DOM update (fixes AI glow timing)
+            if (state.turnPhase === 'Attack') applyGlow();
         }
     </script>
 </body>

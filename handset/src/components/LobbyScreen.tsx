@@ -1,6 +1,9 @@
 import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
 
+const SERVER = import.meta.env.VITE_SERVER_URL || "";
+const AVATARS = ["female-1", "female-2", "female-3", "female-4", "female-5", "female-6", "male-1", "male-2", "male-3"];
+
 interface Props {
   connection: HubConnection;
   gameState: GameState;
@@ -26,20 +29,30 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 pt-8">
-      <p className="text-gray-500 text-sm uppercase tracking-wider">Game Code</p>
-      <p className="text-3xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
+  const removeAI = async (index: number) => {
+    try {
+      await connection.invoke("RemoveAI", index);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
-      <div className="mt-4 w-full max-w-xs">
-        <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Players</p>
-        <ul className="space-y-2">
-          {gameState.players.map((p) => (
-            <li key={p.name} className="flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-3">
-              <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: p.colour }} />
-              <span className="font-medium text-lg">{p.name}</span>
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 pt-6">
+      <p className="text-gray-500 text-xs uppercase tracking-wider">Game Code</p>
+      <p className="text-2xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
+
+      <div className="mt-3 w-full max-w-xs">
+        <ul className="space-y-1.5">
+          {gameState.players.map((p, i) => (
+            <li key={p.name} className="flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2">
+              <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
+              <span className="font-medium">{p.name}</span>
               {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
-              {p.isAI && <span className="ml-auto text-xs text-gray-500">🤖</span>}
+              {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖</span>}
+              {p.isAI && isHost && (
+                <button onClick={() => removeAI(i)} className="ml-auto text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-red-900/30">✕</button>
+              )}
             </li>
           ))}
         </ul>
