@@ -541,3 +541,47 @@
 - `docs/LOBBY-FLOW.md` — new
 - `docs/PLAYER-GUIDE.md` — updated
 - `docs/PROGRESS.md` — this entry
+
+---
+
+## 2026-06-23 Evening — AI Tier 2, ML.NET Tier 3, Strategic Heuristics
+
+### Completed
+
+- **Tier 2 Aggressive AI** — always attacks weakest neighbour, reinforces front-line, blitzes at 5+, moves max on capture, always fortifies from rear to front.
+- **AI Tier Chooser** — lobby shows `🤖 Tier-1` (blue) / `⚔️ Tier-2` (purple) / `🧠 Tier-3` (green) buttons. AddAI accepts tier param. Tier shown in player list.
+- **ML.NET Integration (Phase 1)** — blitz probability model trained from 58K simulated battles. FastTree regression (R²=0.64, MAE=0.16). Model saved as `Data/models/blitz-model.zip`.
+- **`/admin/train` endpoint** — generates training data + trains + loads model in one call.
+- **MlModels service** — singleton, auto-loads model at startup, `PredictBlitz(atk, def)` returns 0–1 capture probability. Falls back to ratio heuristic if model absent.
+- **Tier 3 Strategic Attack** — evaluates all attacks using `ScoreAttack()` (ML probability + continent completion bonus). Blitzes at >0.7, single attack 0.4–0.7, skips <0.4.
+- **Attack Restraint** — Tier 3 stops attacking after earning a card (preserve armies for defence).
+- **Smart Reinforce** — `ScoreReinforceTarget()` weights: continent gap territories ×3, owned continent borders ×2, enemy threat, shore up weak points.
+- **Smart Fortify** — `FindStrategicFortify()` protects weakest border of owned continents from inland surplus. Falls back to Tier 2 logic if no continents owned.
+- **Card Timing** — Tier 3 holds cards until territory bonus available or 4+ cards held (vs Tier 2 which trades immediately).
+- **Exposed `MapData`** on GameService for continent access from AiService.
+- **AiTier field** on Player model. Clamps 1–3.
+- **Docs created:** AI-TIER2-IMPL.md, AI-TIER3-ML-PLAN.md, AI-SELECTION.md (final design), ML-FOR-DUMMIES.md, ML-NET-PROPOSAL.md
+
+### Files Changed
+
+- `server/Risk.Server/Risk.Server.csproj` — Microsoft.ML + FastTree NuGet packages
+- `server/Risk.Server/Models/GameState.cs` — AiTier on Player
+- `server/Risk.Server/Services/GameService.cs` — MapData property, AddAiPlayer tier param, tier clamp
+- `server/Risk.Server/Services/AiService.cs` — Tier 2 + Tier 3 branches, strategic helpers (ScoreReinforceTarget, ScoreAttack, FindStrategicFortify, HasTerritoryBonusSet)
+- `server/Risk.Server/Services/MlModels.cs` — new (loads model, PredictBlitz)
+- `server/Risk.Server/Training/BlitzSimulator.cs` — new (generates training CSV)
+- `server/Risk.Server/Training/ModelTrainer.cs` — new (trains FastTree regression)
+- `server/Risk.Server/Program.cs` — MlModels DI, /admin/train endpoint, model load at startup
+- `server/Risk.Server/Hubs/GameHub.cs` — AddAI tier param
+- `handset/src/components/LobbyScreen.tsx` — Tier-1/2/3 buttons
+- `handset/src/types/game.ts` — aiTier on Player
+
+### Next
+
+- Tier 4 personalities (Carl/Alice/Chris/Ollie) — weight profiles on Tier 3 engine
+- Mystery mode toggle
+- Test Tier 3 vs Tier 2 behaviour
+
+---
+
+*Updated: 2026-06-23 22:03*

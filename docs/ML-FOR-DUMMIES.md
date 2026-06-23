@@ -188,6 +188,65 @@ Why not 100%? **Dice are random.** Even with 10 vs 1, there's a tiny chance you 
 
 Each phase adds a new model. Phase 2–3 require a `GameSimulator` that plays thousands of headless games between existing AI tiers and logs every decision + outcome. The winning players' decisions become the training signal.
 
+## How ML + Heuristics Work Together (Tier 3)
+
+The ML model answers: **"Can I win this fight?"** (probability)
+
+The heuristics answer: **"Should I pick this fight?"** (strategy)
+
+Neither alone is enough:
+- ML without heuristics = wins fights but doesn't know *why* to fight (no continent plan)
+- Heuristics without ML = knows *why* but guesses *whether* (hardcoded 5+ army threshold vs learned probability)
+
+### The Combined Score (`ScoreAttack` in AiService.cs)
+
+```csharp
+float mlScore = ml.PredictBlitz(source.Armies, target.Armies);  // 0.0–1.0
+float continentBonus = ...;  // big bonus if this capture completes a continent
+
+return mlScore + (continentBonus / 20f);  // combined
+```
+
+Example decisions:
+| Situation | ML says | Heuristic says | Combined | Decision |
+|-----------|---------|----------------|----------|----------|
+| 8v3, random territory | 0.83 | +0.0 | 0.83 | Blitz (>0.7) |
+| 4v5, random territory | 0.31 | +0.0 | 0.31 | Skip (<0.4) |
+| 4v3, completes Australia | 0.55 | +0.5 (bonus×5/20) | 1.05 | Blitz! (continent worth the risk) |
+| 3v4, completes Asia | 0.25 | +1.75 (7×5/20) | 2.0 | Blitz! (Asia bonus so valuable, commit) |
+
+The heuristic can override caution when the strategic payoff is high enough. That's the "smart" in Tier 3 — it takes calculated risks for continent control.
+
+### Other Heuristics (no ML involved)
+
+| Heuristic | Where | What it does |
+|-----------|-------|-------------|
+| `ScoreReinforceTarget()` | AiService.cs | Scores territories for reinforcement: continent gaps > borders > threat |
+| Attack restraint | RunStrategicAttack() | Stops attacking after earning a card (preserve armies) |
+| `HasTerritoryBonusSet()` | RunReinforce() | Holds cards until territory bonus available or 4+ held |
+| `FindStrategicFortify()` | RunStrategicFortify() | Moves armies to weakest border of owned continents |
+
+These are regular C# logic — no training data, no models, no .zip files. They encode *Risk strategy knowledge* that humans know (protect your continent borders, don't overextend, earn a card and stop).
+
+### The Layer Cake
+
+```
+┌──────────────────────────────────┐
+│  Strategic Heuristics             │  "What should I do?" (goals)
+│  - Complete continents            │
+│  - Protect borders                │
+│  - Earn a card then stop          │
+├──────────────────────────────────┤
+│  ML Model (blitz-model.zip)       │  "Can I do it?" (probability)
+│  - PredictBlitz(atk, def) → 0–1  │
+├──────────────────────────────────┤
+│  Game Rules (GameService)         │  "Is it legal?" (validation)
+│  - Adjacency, army counts, dice   │
+└──────────────────────────────────┘
+```
+
+Each layer handles a different question. Together they produce an AI that plays like a thoughtful human — knows the rules, calculates the odds, and picks fights for strategic reasons.
+
 ---
 
-*Created: 2026-06-23*
+*Updated: 2026-06-23*

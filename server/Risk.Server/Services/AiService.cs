@@ -87,9 +87,10 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
         if (player.AiTier >= 2)
         {
-            // Tier 2: also trade immediately if able
+            // Tier 2: trade immediately if able
+            // Tier 3: trade if have territory bonus card OR 4+ cards (save for strategic moment)
             var set = FindValidSet(player.Cards);
-            if (set is not null)
+            if (set is not null && (player.AiTier < 3 || player.Cards.Count >= 4 || HasTerritoryBonusSet(state, player)))
             {
                 await Delay(2000, 2500);
                 game.TradeCards(connId, set);
@@ -104,7 +105,12 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay(1500, 2000);
             var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
             Territory target;
-            if (player.AiTier >= 2)
+            if (player.AiTier >= 3)
+            {
+                // Tier 3: strategic reinforce — continent gap territories get priority
+                target = ScoreReinforceTarget(state, owned);
+            }
+            else if (player.AiTier >= 2)
             {
                 // Tier 2: concentrate on front-line, prioritise most adjacent enemies then lowest armies
                 var frontLine = owned
@@ -164,6 +170,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         int maxAttacks = 6;
         for (int i = 0; i < maxAttacks; i++)
         {
+            // Attack restraint: stop if we already earned a card this turn (preserve armies)
+            if (player.EarnedCardThisTurn && i > 0) break;
+
             var sources = state.Territories
                 .Where(t => t.OwnerId == state.CurrentPlayerIndex && t.Armies > 1
                     && t.Adjacent.Any(a => state.Territories[a].OwnerId != state.CurrentPlayerIndex))
@@ -174,7 +183,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
             if (sources.Count == 0) break;
 
-            // Evaluate all possible (source, target) pairs using ML
+            // Evaluate all possible (source, target) pairs using strategic scoring
             Territory? bestSource = null;
             Territory? bestTarget = null;
             float bestScore = 0;
@@ -188,7 +197,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
                 foreach (var tgt in targets)
                 {
-                    float score = ml.PredictBlitz(src.Armies, tgt.Armies);
+                    float score = ScoreAttack(state, src, tgt);
                     if (score > bestScore)
                     {
                         bestScore = score;
@@ -198,7 +207,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 }
             }
 
-            // Only attack if model predicts > 0.4 chance of success
+            // Only attack if combined score > 0.4
             if (bestSource is null || bestTarget is null || bestScore < 0.4f) break;
 
             // Show selection
@@ -207,7 +216,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
             await Delay(1500, 2000);
 
-            if (bestScore > 0.7f && bestSource.Armies >= 4)
+            float captureChance = ml.PredictBlitz(bestSource.Armies, bestTarget.Armies);
+            if (captureChance > 0.7f && bestSource.Armies >= 4)
             {
                 // High confidence — blitz
                 var (_, blitzResult) = game.Blitz(connId, bestSource.Id, bestTarget.Id);
@@ -384,6 +394,11 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
     private async Task RunFortify(GameState state, Player player, string connId)
     {
+        if (player.AiTier >= 3)
+        {
+            await RunStrategicFortify(state, player, connId);
+            return;
+        }
         if (player.AiTier >= 2)
         {
             await RunAggressiveFortify(state, player, connId);
@@ -428,18 +443,33 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         TriggerIfAi();
     }
 
-    private async Task EndAttack(GameState state, Player player, string connId)
-    {
-        await Delay(1000, 1500);
-        game.EndAttack(connId);
-        await Broadcast();
-    }
-
-    private async Task RunAggressiveFortify(GameState state, Player player, string connId)
+    private async Task RunStrategicFortify(GameState state, Player player, string connId)
     {
         await Delay(1500, 2500);
 
-        // Find safest inland territory with most armies (all neighbours owned)
+        var (source, target) = FindStrategicFortify(state);
+        if (source is not null && target is not null)
+        {
+            int armies = source.Armies - 1;
+            game.Fortify(connId, source.Id, target.Id, armies);
+            await hub.Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
+            await Broadcast();
+        }
+        else
+        {
+            // Fall back to aggressive fortify (inland → front)
+            await RunAggressiveFortifyLogic(state, connId);
+        }
+
+        await Delay(1000, 1500);
+        game.EndTurn(connId);
+        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Broadcast();
+        TriggerIfAi();
+    }
+
+    private async Task RunAggressiveFortifyLogic(GameState state, string connId)
+    {
         var inland = state.Territories
             .Where(t => t.OwnerId == state.CurrentPlayerIndex && t.Armies > 1
                 && t.Adjacent.All(a => state.Territories[a].OwnerId == state.CurrentPlayerIndex))
@@ -448,7 +478,6 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
         if (inland is not null)
         {
-            // Move toward front: find adjacent owned territory that has enemy neighbours
             var frontTarget = inland.Adjacent
                 .Select(a => state.Territories[a])
                 .Where(t => t.OwnerId == state.CurrentPlayerIndex
@@ -456,7 +485,6 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 .OrderBy(t => t.Armies)
                 .FirstOrDefault();
 
-            // If no direct front neighbour, just pick any adjacent owned
             frontTarget ??= inland.Adjacent
                 .Select(a => state.Territories[a])
                 .Where(t => t.OwnerId == state.CurrentPlayerIndex)
@@ -470,12 +498,155 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 await Broadcast();
             }
         }
+    }
 
+    private async Task EndAttack(GameState state, Player player, string connId)
+    {
+        await Delay(1000, 1500);
+        game.EndAttack(connId);
+        await Broadcast();
+    }
+
+    private async Task RunAggressiveFortify(GameState state, Player player, string connId)
+    {
+        await Delay(1500, 2500);
+        await RunAggressiveFortifyLogic(state, connId);
         await Delay(1000, 1500);
         game.EndTurn(connId);
         await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
         TriggerIfAi();
+    }
+
+    // --- Strategic Helpers (Tier 3) ---
+
+    /// <summary>
+    /// Scores each owned territory for reinforcement priority.
+    /// Weighs: continent completion proximity, border threat, chokepoint value.
+    /// </summary>
+    private Territory ScoreReinforceTarget(GameState state, List<Territory> owned)
+    {
+        var playerIndex = state.CurrentPlayerIndex;
+        Territory? best = null;
+        float bestScore = -1;
+
+        foreach (var t in owned)
+        {
+            bool isBorder = t.Adjacent.Any(a => state.Territories[a].OwnerId != playerIndex);
+            if (!isBorder) continue; // never reinforce inland
+
+            float score = 0;
+
+            // Threat: enemy armies adjacent
+            int enemyThreat = t.Adjacent
+                .Where(a => state.Territories[a].OwnerId != playerIndex)
+                .Sum(a => state.Territories[a].Armies);
+            score += enemyThreat * 0.5f;
+
+            // Continent gap bonus: if this territory can attack into a continent we nearly own
+            foreach (var continent in game.MapData.Continents)
+            {
+                int ownedInContinent = continent.Territories.Count(id => state.Territories[id].OwnerId == playerIndex);
+                int total = continent.Territories.Count;
+                float progress = (float)ownedInContinent / total;
+
+                // Territory is the gateway to completing this continent
+                if (progress >= 0.6f && t.Adjacent.Any(a => continent.Territories.Contains(a) && state.Territories[a].OwnerId != playerIndex))
+                    score += continent.Bonus * 3f;
+
+                // Territory is a border of a continent we fully own (protect it)
+                if (ownedInContinent == total && t.Adjacent.Any(a => !continent.Territories.Contains(a) && state.Territories[a].OwnerId != playerIndex))
+                    score += continent.Bonus * 2f;
+            }
+
+            // Prefer territories with fewer armies (shore up weak points)
+            score += Math.Max(0, 10 - t.Armies);
+
+            if (score > bestScore) { bestScore = score; best = t; }
+        }
+
+        return best ?? owned[Random.Shared.Next(owned.Count)];
+    }
+
+    /// <summary>
+    /// Scores an attack for Tier 3 considering continent completion.
+    /// Combines ML blitz probability with strategic value.
+    /// </summary>
+    private float ScoreAttack(GameState state, Territory source, Territory target)
+    {
+        var playerIndex = state.CurrentPlayerIndex;
+        float mlScore = ml.PredictBlitz(source.Armies, target.Armies);
+
+        float continentBonus = 0;
+        foreach (var continent in game.MapData.Continents)
+        {
+            if (!continent.Territories.Contains(target.Id)) continue;
+            int ownedInContinent = continent.Territories.Count(id => state.Territories[id].OwnerId == playerIndex);
+            int total = continent.Territories.Count;
+
+            // Capturing this would complete the continent
+            if (ownedInContinent == total - 1)
+                continentBonus = continent.Bonus * 5f;
+            // Close to completing (>60%)
+            else if ((float)ownedInContinent / total >= 0.6f)
+                continentBonus = continent.Bonus * 2f;
+        }
+
+        // Combined score: ML probability + strategic value (normalised)
+        return mlScore + (continentBonus / 20f);
+    }
+
+    /// <summary>
+    /// Finds the best fortify move for Tier 3: protect continent chokepoints.
+    /// </summary>
+    private (Territory? Source, Territory? Target) FindStrategicFortify(GameState state)
+    {
+        var playerIndex = state.CurrentPlayerIndex;
+
+        // Find continent borders we own that are under-defended
+        Territory? weakestBorder = null;
+        int lowestArmies = int.MaxValue;
+
+        foreach (var continent in game.MapData.Continents)
+        {
+            int ownedInContinent = continent.Territories.Count(id => state.Territories[id].OwnerId == playerIndex);
+            if (ownedInContinent < continent.Territories.Count) continue; // don't own this continent
+
+            // Find border territories of this owned continent
+            foreach (var tId in continent.Territories)
+            {
+                var t = state.Territories[tId];
+                if (t.Adjacent.Any(a => !continent.Territories.Contains(a) && state.Territories[a].OwnerId != playerIndex))
+                {
+                    if (t.Armies < lowestArmies) { lowestArmies = t.Armies; weakestBorder = t; }
+                }
+            }
+        }
+
+        if (weakestBorder is null)
+        {
+            // No owned continents — fall back to Tier 2 logic (inland to front)
+            return (null, null);
+        }
+
+        // Find adjacent owned territory with surplus armies to donate
+        var donor = weakestBorder.Adjacent
+            .Select(a => state.Territories[a])
+            .Where(t => t.OwnerId == playerIndex && t.Armies > 2
+                && t.Adjacent.All(a => state.Territories[a].OwnerId == playerIndex)) // donor is safe inland
+            .OrderByDescending(t => t.Armies)
+            .FirstOrDefault();
+
+        return donor is not null ? (donor, weakestBorder) : (null, null);
+    }
+
+    /// <summary>
+    /// Checks if player has a card matching a territory they own (gives +2 bonus on trade).
+    /// </summary>
+    private static bool HasTerritoryBonusSet(GameState state, Player player)
+    {
+        var ownedIds = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).Select(t => t.Id).ToHashSet();
+        return player.Cards.Any(c => c.TerritoryId.HasValue && ownedIds.Contains(c.TerritoryId.Value));
     }
 
     private static int[]? FindValidSet(List<Card> cards)
