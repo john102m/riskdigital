@@ -119,7 +119,7 @@ public class GameService
             Colour = colour,
             AvatarIndex = avatar,
             IsAI = true,
-            AiTier = Math.Clamp(tier, 1, 2)
+            AiTier = Math.Clamp(tier, 1, 3)
         });
 
         return _state;

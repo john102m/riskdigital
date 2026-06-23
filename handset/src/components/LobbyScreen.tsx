@@ -74,6 +74,9 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
               <button onClick={() => addAI(2)} className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-bold text-sm transition">
                 ⚔️ Tier-2
               </button>
+              <button onClick={() => addAI(3)} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                🧠 Tier-3
+              </button>
             </div>
           )}
 

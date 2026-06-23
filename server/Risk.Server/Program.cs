@@ -10,8 +10,8 @@ builder.Services.AddSignalR()
         options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddSingleton<GameService>();
-
 builder.Services.AddSingleton<AiService>();
+builder.Services.AddSingleton<MlModels>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -56,6 +56,28 @@ app.MapGet("/admin/missions", (GameService game) =>
 
 app.MapGet("/board", (IWebHostEnvironment env) =>
     Results.File(Path.Combine(env.WebRootPath, "tv.html"), "text/html"));
+
+// ML: train blitz model (run once, then it's loaded for AI)
+app.MapGet("/admin/train", (IWebHostEnvironment env, MlModels ml) =>
+{
+    var dataDir = Path.Combine(env.ContentRootPath, "Data", "models");
+    Directory.CreateDirectory(dataDir);
+    var csvPath = Path.Combine(dataDir, "blitz-data.csv");
+    var modelPath = Path.Combine(dataDir, "blitz-model.zip");
+
+    Risk.Server.Training.BlitzSimulator.GenerateData(csvPath);
+    Risk.Server.Training.ModelTrainer.Train(csvPath, modelPath);
+    ml.Load(modelPath);
+
+    return Results.Ok($"Trained and loaded. Model at: {modelPath}");
+});
+
+// Load ML model if it exists
+{
+    var ml = app.Services.GetRequiredService<MlModels>();
+    var modelPath = Path.Combine(app.Environment.ContentRootPath, "Data", "models", "blitz-model.zip");
+    ml.Load(modelPath);
+}
 
 app.MapFallbackToFile("index.html");
 
