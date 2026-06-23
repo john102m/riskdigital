@@ -4,7 +4,7 @@ using Risk.Server.Models;
 
 namespace Risk.Server.Services;
 
-public class AiService(GameService game, IHubContext<GameHub> hub)
+public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 {
     public void TriggerIfAi()
     {
@@ -130,6 +130,11 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
 
     private async Task RunAttack(GameState state, Player player, string connId)
     {
+        if (player.AiTier >= 3)
+        {
+            await RunStrategicAttack(state, player, connId);
+            return;
+        }
         if (player.AiTier >= 2)
         {
             await RunAggressiveAttack(state, player, connId);
@@ -148,6 +153,101 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
         {
             if (!await DoRandomAttack(state, player, connId)) break;
             await Delay(2500, 3500);
+        }
+
+        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await EndAttack(state, player, connId);
+    }
+
+    private async Task RunStrategicAttack(GameState state, Player player, string connId)
+    {
+        int maxAttacks = 6;
+        for (int i = 0; i < maxAttacks; i++)
+        {
+            var sources = state.Territories
+                .Where(t => t.OwnerId == state.CurrentPlayerIndex && t.Armies > 1
+                    && t.Adjacent.Any(a => state.Territories[a].OwnerId != state.CurrentPlayerIndex))
+                .ToList();
+
+            if (state.HouseRules.LockedAttackFront && state.AttackFrontIds.Count > 0)
+                sources = sources.Where(t => state.AttackFrontIds.Contains(t.Id)).ToList();
+
+            if (sources.Count == 0) break;
+
+            // Evaluate all possible (source, target) pairs using ML
+            Territory? bestSource = null;
+            Territory? bestTarget = null;
+            float bestScore = 0;
+
+            foreach (var src in sources)
+            {
+                var targets = src.Adjacent
+                    .Select(a => state.Territories[a])
+                    .Where(t => t.OwnerId != state.CurrentPlayerIndex)
+                    .ToList();
+
+                foreach (var tgt in targets)
+                {
+                    float score = ml.PredictBlitz(src.Armies, tgt.Armies);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestSource = src;
+                        bestTarget = tgt;
+                    }
+                }
+            }
+
+            // Only attack if model predicts > 0.4 chance of success
+            if (bestSource is null || bestTarget is null || bestScore < 0.4f) break;
+
+            // Show selection
+            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, (int?)null);
+            await Delay(1000, 1500);
+            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
+            await Delay(1500, 2000);
+
+            if (bestScore > 0.7f && bestSource.Armies >= 4)
+            {
+                // High confidence — blitz
+                var (_, blitzResult) = game.Blitz(connId, bestSource.Id, bestTarget.Id);
+                await hub.Clients.All.SendAsync("BlitzResult", blitzResult);
+                await Broadcast();
+
+                if (blitzResult.Captured)
+                {
+                    await Delay(1500, 2000);
+                    int max = bestSource.Armies - 1;
+                    if (max > 0)
+                    {
+                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        await Broadcast();
+                    }
+                    if (state.Phase == GamePhase.GameOver) return;
+                }
+            }
+            else
+            {
+                // Medium confidence — single attack
+                int dice = Math.Min(3, bestSource.Armies - 1);
+                var (_, result) = game.Attack(connId, bestSource.Id, bestTarget.Id, dice);
+                await hub.Clients.All.SendAsync("CombatResult", result);
+                await Broadcast();
+
+                if (result.Captured)
+                {
+                    await Delay(1500, 2000);
+                    int max = bestSource.Armies - 1;
+                    if (max > 0)
+                    {
+                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        await Broadcast();
+                    }
+                    if (state.Phase == GamePhase.GameOver) return;
+                }
+            }
+
+            await Delay(2000, 3000);
         }
 
         await hub.Clients.All.SendAsync("AttackSelection", null, null);
