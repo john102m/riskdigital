@@ -31,11 +31,12 @@ app.UseStaticFiles();
 
 app.MapHub<GameHub>("/gamehub");
 
-app.MapGet("/admin/reset", (GameService game, IHubContext<GameHub> hub) =>
+app.MapGet("/admin/reset", (GameService game, IHubContext<GameHub> hub, bool? debug) =>
 {
+    game.DebugMode = debug ?? false;
     game.Reset();
     hub.Clients.All.SendAsync("GameStateUpdated", (object?)null);
-    return Results.Ok("Reset");
+    return Results.Ok(game.DebugMode ? "Reset (debug mode — reduced armies)" : "Reset");
 });
 
 app.MapGet("/admin/gameover", (GameService game, IHubContext<GameHub> hub) =>
@@ -52,6 +53,9 @@ app.MapGet("/admin/missions", (GameService game) =>
     var missions = game.State.Players.Select((p, i) => new { Player = p.Name, Colour = p.Colour, Mission = p.Mission?.Description ?? "none", Fallback = p.Mission?.FallenBackToWorldDomination ?? false });
     return Results.Ok(missions);
 });
+
+app.MapGet("/board", (IWebHostEnvironment env) =>
+    Results.File(Path.Combine(env.WebRootPath, "tv.html"), "text/html"));
 
 app.MapFallbackToFile("index.html");
 

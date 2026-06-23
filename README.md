@@ -5,13 +5,22 @@ Digital adaptation of the classic Risk board game. A TV displays the shared worl
 ## Architecture
 
 ```
-Phone (React) ──SignalR──▶ .NET 8 Server (WHUK) ◀──SignalR── Fire TV (Unity)
+Phone (React) ──SignalR──▶ .NET 8 Server (WHUK) ◀──SignalR── TV Board (Web or Unity)
 ```
 
 - **server/** — .NET 8 + SignalR game server (open in VS2022)
 - **handset/** — React + Vite + Tailwind player controller (open in VS Code)
 - **tv/** — Unity 2D project for TV display (Unity Editor + VS2022)
 - **docs/** — Design docs, rules, territory data, map asset
+
+### Two TV Board Targets
+
+| Target | Path | Access | Use Case |
+|--------|------|--------|----------|
+| **Web board** | `server/wwwroot/tv.html` | Any browser (Fire Stick Silk, phone, laptop) | Easy family access — no install, just open a URL |
+| **Unity board** | `tv/` | Android APK sideloaded via ADB | Premium experience — dice animations, sound, polish |
+
+The web board emerged organically while waiting for the Z440 workstation (needed for Unity dev). It proved so useful that both targets are now permanent — web for accessibility, Unity for the full experience.
 
 ## Quick Start
 

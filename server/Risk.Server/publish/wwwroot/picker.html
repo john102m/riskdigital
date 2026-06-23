@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Risk — Territory Coordinate Picker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #111; color: #eee; font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        .toolbar { padding: 8px 16px; background: #222; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+        .toolbar button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .toolbar .current { font-size: 14px; color: #38a169; font-weight: bold; }
+        .toolbar .progress { color: #888; font-size: 13px; }
+        .map-wrap { position: relative; flex: 1; overflow: hidden; cursor: crosshair; }
+        .map-wrap img { width: 100%; height: 100%; object-fit: fill; }
+        .dot { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #38a169; border: 2px solid #fff; transform: translate(-50%, -50%); pointer-events: none; }
+        .dot .label { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9px; white-space: nowrap; color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 2px; }
+        #output { max-height: 200px; overflow-y: auto; padding: 8px 16px; background: #1a1a1a; font-family: monospace; font-size: 12px; white-space: pre; flex-shrink: 0; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="current" id="current-territory">Click: Alaska (0)</span>
+        <span class="progress" id="progress">0/42</span>
+        <button onclick="undo()" style="background:#E53E3E;color:#fff;">Undo</button>
+        <button onclick="exportCoords()" style="background:#3182CE;color:#fff;">Export</button>
+        <button onclick="reset()" style="background:#666;color:#fff;">Reset</button>
+    </div>
+    <div class="map-wrap" id="map-wrap">
+        <img src="/risk-board-game-map.jpg" alt="Risk Map" />
+    </div>
+    <pre id="output"></pre>
+
+    <script>
+        const TERRITORIES = [
+            "Alaska","Northwest Territory","Greenland","Alberta","Ontario","Quebec",
+            "Western United States","Eastern United States","Central America",
+            "Venezuela","Brazil","Peru","Argentina",
+            "Iceland","Scandinavia","Great Britain","Northern Europe","Ukraine","Western Europe","Southern Europe",
+            "North Africa","Egypt","East Africa","Congo","Madagascar","South Africa",
+            "Ural","Siberia","Afghanistan","Yakutsk","Middle East","Irkutsk","India","China","Mongolia","Southeast Asia",
+            "Kamchatka","Japan","Indonesia","New Guinea","Western Australia","Eastern Australia"
+        ];
+
+        let coords = [];
+        let dots = [];
+
+        const mapWrap = document.getElementById('map-wrap');
+        const currentEl = document.getElementById('current-territory');
+        const progressEl = document.getElementById('progress');
+        const outputEl = document.getElementById('output');
+
+        mapWrap.addEventListener('click', (e) => {
+            if (coords.length >= 42) return;
+            const rect = mapWrap.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+            const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+            coords.push([parseFloat(x), parseFloat(y)]);
+
+            // Place dot
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            dot.style.left = x + '%';
+            dot.style.top = y + '%';
+            dot.innerHTML = `<span class="label">${coords.length - 1}</span>`;
+            mapWrap.appendChild(dot);
+            dots.push(dot);
+
+            updateUI();
+        });
+
+        function undo() {
+            if (coords.length === 0) return;
+            coords.pop();
+            const dot = dots.pop();
+            dot.remove();
+            updateUI();
+        }
+
+        function reset() {
+            coords = [];
+            dots.forEach(d => d.remove());
+            dots = [];
+            updateUI();
+        }
+
+        function updateUI() {
+            const idx = coords.length;
+            if (idx >= 42) {
+                currentEl.textContent = 'All done!';
+            } else {
+                currentEl.textContent = `Click: ${TERRITORIES[idx]} (${idx})`;
+            }
+            progressEl.textContent = `${idx}/42`;
+        }
+
+        function exportCoords() {
+            const lines = coords.map((c, i) => `            [${c[0]}, ${c[1]}],${' '.repeat(Math.max(1, 6 - String(c[0]).length))}// ${i}  ${TERRITORIES[i]}`);
+            outputEl.textContent = `const COORDS_RAW = [\n${lines.join('\n')}\n];`;
+        }
+    </script>
+</body>
+</html>

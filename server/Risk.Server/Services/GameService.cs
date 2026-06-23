@@ -7,7 +7,9 @@ namespace Risk.Server.Services;
 public class GameService
 {
     private static readonly string[] PlayerColours = ["#E53E3E", "#3182CE", "#38A169", "#D69E2E", "#805AD5", "#DD6B20"];
-    private static readonly int[] StartingArmies = [0, 0, 23, 16, 30, 25, 20]; // index = player count (2p reduced for dev)
+    private static readonly int[] StartingArmies = [0, 0, 40, 35, 30, 25, 20]; // index = player count
+    private static readonly int[] DebugArmies =   [0, 0, 23, 16, 15, 12, 10];
+    public bool DebugMode { get; set; }
 
     private readonly TerritoryData _territoryData;
     private GameState? _state;
@@ -20,8 +22,18 @@ public class GameService
         _territoryData = JsonSerializer.Deserialize<TerritoryData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
 
-    public GameState CreateGame(string playerName, string connectionId)
+    public object GetLobbyStatus()
     {
+        if (_state is null || _state.Phase == GamePhase.GameOver)
+            return new { gameExists = false };
+        return new { gameExists = true, gameCode = _state.GameCode, phase = _state.Phase.ToString(), playerCount = _state.Players.Count };
+    }
+
+    public GameState CreateGame(string playerName, string connectionId, int colourIndex = 0, int avatarIndex = 0)
+    {
+        if (_state is not null && _state.Phase != GamePhase.GameOver)
+            throw new HubException("A game is already in progress.");
+
         _state = new GameState
         {
             GameCode = GenerateCode(),
@@ -32,14 +44,15 @@ public class GameService
         {
             ConnectionId = connectionId,
             Name = playerName,
-            Colour = PlayerColours[0],
+            Colour = PlayerColours[Math.Clamp(colourIndex, 0, 5)],
+            AvatarIndex = Math.Clamp(avatarIndex, 0, 8),
             IsHost = true
         });
 
         return _state;
     }
 
-    public GameState JoinGame(string gameCode, string playerName, string connectionId)
+    public GameState JoinGame(string gameCode, string playerName, string connectionId, int colourIndex = 0, int avatarIndex = 0)
     {
         if (_state is null || _state.GameCode != gameCode)
             throw new HubException("Game not found.");
@@ -53,11 +66,16 @@ public class GameService
         if (_state.Players.Any(p => p.Name == playerName))
             throw new HubException("Name already taken.");
 
+        var colour = PlayerColours[Math.Clamp(colourIndex, 0, 5)];
+        if (_state.Players.Any(p => p.Colour == colour))
+            throw new HubException("Colour already taken. Pick another.");
+
         _state.Players.Add(new Player
         {
             ConnectionId = connectionId,
             Name = playerName,
-            Colour = PlayerColours[_state.Players.Count]
+            Colour = colour,
+            AvatarIndex = Math.Clamp(avatarIndex, 0, 8)
         });
 
         return _state;
@@ -65,6 +83,9 @@ public class GameService
 
 
     private static readonly string[] AiNames = ["Bot Alice", "Bot Bob", "Bot Carol", "Bot Dave", "Bot Eve"];
+    private static readonly string[] AvatarFiles = ["female-1", "female-2", "female-3", "female-4", "female-5", "female-6", "male-1", "male-2", "male-3"];
+    private static readonly int[] FemaleAvatars = [0, 1, 2, 3, 4, 5];
+    private static readonly int[] MaleAvatars = [6, 7, 8];
 
     public GameState AddAiPlayer(string connectionId)
     {
@@ -82,13 +103,44 @@ public class GameService
         var name = AiNames.FirstOrDefault(n => !usedNames.Contains(n))
             ?? $"Bot {_state.Players.Count}";
 
+        var usedColours = _state.Players.Select(p => p.Colour).ToHashSet();
+        var colour = PlayerColours.First(c => !usedColours.Contains(c));
+
+        var usedAvatars = _state.Players.Select(p => p.AvatarIndex).ToHashSet();
+        var isFemale = name.Contains("Alice") || name.Contains("Carol") || name.Contains("Eve");
+        var genderPool = isFemale ? FemaleAvatars : MaleAvatars;
+        var avatar = genderPool.FirstOrDefault(a => !usedAvatars.Contains(a));
+        if (usedAvatars.Contains(avatar)) avatar = Enumerable.Range(0, 9).First(a => !usedAvatars.Contains(a));
+
         _state.Players.Add(new Player
         {
             ConnectionId = $"ai-{Guid.NewGuid():N}",
             Name = name,
-            Colour = PlayerColours[_state.Players.Count],
+            Colour = colour,
+            AvatarIndex = avatar,
             IsAI = true
         });
+
+        return _state;
+    }
+
+    public GameState RemoveAI(string connectionId, int playerIndex)
+    {
+        if (_state is null || _state.Phase != GamePhase.Lobby)
+            throw new HubException("Not in lobby.");
+
+        var caller = _state.Players.FirstOrDefault(p => p.ConnectionId == connectionId);
+        if (caller is null || !caller.IsHost)
+            throw new HubException("Only the host can remove AI players.");
+
+        if (playerIndex < 0 || playerIndex >= _state.Players.Count)
+            throw new HubException("Invalid player index.");
+
+        var target = _state.Players[playerIndex];
+        if (!target.IsAI)
+            throw new HubException("Can only remove AI players.");
+
+        _state.Players.RemoveAt(playerIndex);
 
         return _state;
     }
@@ -111,12 +163,12 @@ public class GameService
         if (_state.HouseRules.UseMissions)
             DealMissions();
         _state.Phase = GamePhase.InitialPlacement;
-        _state.CurrentPlayerIndex = 0;
+        _state.CurrentPlayerIndex = Random.Shared.Next(_state.Players.Count);
 
         return _state;
     }
 
-    public GameState PlaceArmy(string connectionId, int territoryId)
+    public (GameState State, int Placed) PlaceArmy(string connectionId, int territoryId, int count = 1)
     {
         if (_state is null || _state.Phase != GamePhase.InitialPlacement)
             throw new HubException("Not in placement phase.");
@@ -132,12 +184,13 @@ public class GameService
         if (territory is null || territory.OwnerId != _state.CurrentPlayerIndex)
             throw new HubException("You don't own that territory.");
 
-        territory.Armies++;
-        player.ReinforcementsRemaining--;
+        var actual = Math.Min(Math.Max(1, count), player.ReinforcementsRemaining);
+        territory.Armies += actual;
+        player.ReinforcementsRemaining -= actual;
 
         AdvancePlacementTurn();
 
-        return _state;
+        return (_state, actual);
     }
 
     public void Rejoin(string playerName, string connectionId)
@@ -173,7 +226,7 @@ public class GameService
 
     private void SetStartingArmies()
     {
-        int total = StartingArmies[_state!.Players.Count];
+        int total = (DebugMode ? DebugArmies : StartingArmies)[_state!.Players.Count];
         for (int i = 0; i < _state.Players.Count; i++)
         {
             int owned = _state.Territories.Count(t => t.OwnerId == i);
@@ -204,7 +257,6 @@ public class GameService
 
     private void DealMissions()
     {
-        var colourNames = new[] { "Red", "Blue", "Green", "Yellow", "Purple", "Orange" };
         var missions = new List<Mission>
         {
             new() { Type = MissionType.ContinentConquest, Description = "Control North America and Africa", RequiredContinents = ["North America", "Africa"] },
@@ -219,7 +271,15 @@ public class GameService
 
         // Add elimination missions only for colours in the game
         for (int i = 0; i < _state!.Players.Count; i++)
-            missions.Add(new Mission { Type = MissionType.Elimination, Description = $"Eliminate {colourNames[i]}", TargetPlayerIndex = i });
+        {
+            var colourName = _state.Players[i].Colour switch
+            {
+                "#E53E3E" => "Red", "#3182CE" => "Blue", "#38A169" => "Green",
+                "#D69E2E" => "Yellow", "#805AD5" => "Purple", "#DD6B20" => "Orange",
+                _ => $"Player {i + 1}"
+            };
+            missions.Add(new Mission { Type = MissionType.Elimination, Description = $"Eliminate {colourName}", TargetPlayerIndex = i });
+        }
 
         // Shuffle
         for (int i = missions.Count - 1; i > 0; i--)
@@ -388,7 +448,7 @@ public class GameService
         return nonWild.Distinct().Count() == 1 || nonWild.Distinct().Count() == 3;
     }
 
-    public GameState Reinforce(string connectionId, int territoryId)
+    public (GameState State, int Placed) Reinforce(string connectionId, int territoryId, int count = 1)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Reinforce)
             throw new HubException("Not in reinforce phase.");
@@ -407,10 +467,11 @@ public class GameService
         if (territory is null || territory.OwnerId != _state.CurrentPlayerIndex)
             throw new HubException("You don't own that territory.");
 
-        territory.Armies++;
-        player.ReinforcementsRemaining--;
+        var actual = Math.Min(Math.Max(1, count), player.ReinforcementsRemaining);
+        territory.Armies += actual;
+        player.ReinforcementsRemaining -= actual;
 
-        return _state;
+        return (_state, actual);
     }
 
     public GameState EndReinforce(string connectionId)

@@ -61,6 +61,7 @@ public class Player
     public string ConnectionId { get; set; } = "";
     public string Name { get; set; } = "";
     public string Colour { get; set; } = "";
+    public int AvatarIndex { get; set; }
     public bool IsHost { get; set; }
     public int ReinforcementsRemaining { get; set; }
     [JsonIgnore]

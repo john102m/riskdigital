@@ -3,6 +3,7 @@ import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { ContinentAccordion } from "./ContinentAccordion";
+import { tap, heavyTap } from "../utils/vibrate";
 
 interface Props {
   connection: HubConnection;
@@ -28,9 +29,9 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
     );
   }
 
-  const placeArmy = async (territoryId: number) => {
+  const placeArmy = async (territoryId: number, count: number = 1) => {
     try {
-      await connection.invoke("PlaceArmy", territoryId);
+      await connection.invoke("PlaceArmy", territoryId, count);
     } catch (e: any) {
       alert(e.message);
     }
@@ -50,15 +51,25 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
           expanded={expanded}
           onToggle={(c) => setExpanded((e) => e === c ? null : c)}
           renderButton={(t) => (
-            <button
-              key={t.id}
-              onClick={() => placeArmy(t.id)}
-              style={{ backgroundColor: me.colour + "33" }}
-              className="px-3 py-2 rounded text-sm flex justify-between items-center border border-white/10 w-full active:brightness-125"
-            >
-              <span className="font-medium truncate">{t.name}</span>
-              <span className="font-bold ml-1">{t.armies}</span>
-            </button>
+            <div key={t.id} className="flex items-center gap-1 w-full">
+              <button
+                onClick={() => { tap(); placeArmy(t.id, 1); }}
+                onContextMenu={(e) => e.preventDefault()}
+                style={{ backgroundColor: me.colour + "33" }}
+                className="w-[70%] px-3 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation"
+              >
+                <span className="font-medium truncate">{t.name}</span>
+                <span className="font-bold ml-1">{t.armies}</span>
+              </button>
+              <button
+                onClick={() => { heavyTap(); placeArmy(t.id, me.reinforcementsRemaining); }}
+                onContextMenu={(e) => e.preventDefault()}
+                disabled
+                className="w-[30%] px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 transition-all touch-manipulation opacity-30"
+              >
+                All
+              </button>
+            </div>
           )}
         />
       </div>

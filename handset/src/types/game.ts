@@ -5,6 +5,7 @@ export interface Player {
   connectionId: string;
   name: string;
   colour: string;
+  avatarIndex: number;
   isHost: boolean;
   reinforcementsRemaining: number;
   isEliminated: boolean;

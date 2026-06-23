@@ -125,9 +125,11 @@ public class AiService(GameService game, IHubContext<GameHub> hub)
 
             var target = targets[Random.Shared.Next(targets.Count)];
 
-            // Show selection glow on TV
+            // Show selection glow on TV — source first, then target
+            await hub.Clients.All.SendAsync("AttackSelection", source.Id, (int?)null);
+            await Delay(1000, 1500);
             await hub.Clients.All.SendAsync("AttackSelection", source.Id, target.Id);
-            await Delay(2500, 3500);
+            await Delay(1500, 2000);
 
             int dice = Math.Min(3, source.Armies - 1);
             var (_, result) = game.Attack(connId, source.Id, target.Id, dice);

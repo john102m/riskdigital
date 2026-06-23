@@ -15,22 +15,38 @@ public class GameHub : Hub
         _ai = ai;
     }
 
-    public async Task CreateGame(string playerName)
+    public async Task GetLobbyStatus()
     {
-        var state = _game.CreateGame(playerName, Context.ConnectionId);
-        await BroadcastState(state);
+        var status = _game.GetLobbyStatus();
+        await Clients.Caller.SendAsync("LobbyStatus", status);
     }
 
-    public async Task JoinGame(string gameCode, string playerName)
+    public async Task CreateGame(string playerName, int colourIndex = 0, int avatarIndex = 0)
     {
-        var state = _game.JoinGame(gameCode, playerName, Context.ConnectionId);
+        var state = _game.CreateGame(playerName, Context.ConnectionId, colourIndex, avatarIndex);
         await BroadcastState(state);
+        await BroadcastLobbyStatus();
+    }
+
+    public async Task JoinGame(string gameCode, string playerName, int colourIndex = 0, int avatarIndex = 0)
+    {
+        var state = _game.JoinGame(gameCode, playerName, Context.ConnectionId, colourIndex, avatarIndex);
+        await BroadcastState(state);
+        await BroadcastLobbyStatus();
     }
 
     public async Task AddAI()
     {
         var state = _game.AddAiPlayer(Context.ConnectionId);
         await BroadcastState(state);
+        await BroadcastLobbyStatus();
+    }
+
+    public async Task RemoveAI(int playerIndex)
+    {
+        var state = _game.RemoveAI(Context.ConnectionId, playerIndex);
+        await BroadcastState(state);
+        await BroadcastLobbyStatus();
     }
 
     public async Task StartGame()
@@ -45,19 +61,19 @@ public class GameHub : Hub
         _ai.TriggerIfAi();
     }
 
-    public async Task PlaceArmy(int territoryId)
+    public async Task PlaceArmy(int territoryId, int count = 1)
     {
         var playerIndex = _game.State!.CurrentPlayerIndex;
-        var state = _game.PlaceArmy(Context.ConnectionId, territoryId);
-        await Clients.All.SendAsync("ArmiesPlaced", playerIndex, territoryId, 1);
+        var (state, placed) = _game.PlaceArmy(Context.ConnectionId, territoryId, count);
+        await Clients.All.SendAsync("ArmiesPlaced", playerIndex, territoryId, placed);
         await BroadcastState(state);
         _ai.TriggerIfAi();
     }
 
-    public async Task Reinforce(int territoryId)
+    public async Task Reinforce(int territoryId, int count = 1)
     {
-        var state = _game.Reinforce(Context.ConnectionId, territoryId);
-        await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, 1);
+        var (state, placed) = _game.Reinforce(Context.ConnectionId, territoryId, count);
+        await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, placed);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;
@@ -105,6 +121,7 @@ public class GameHub : Hub
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
     {
         var (state, forcedTrade, eliminatedIndex, missionWon) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
+        await Clients.All.SendAsync("TroopsMovedIn", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (eliminatedIndex >= 0)
             await Clients.All.SendAsync("PlayerEliminated", eliminatedIndex, state.CurrentPlayerIndex);
         if (missionWon)
@@ -186,5 +203,11 @@ public class GameHub : Hub
     private async Task BroadcastState(object state)
     {
         await Clients.All.SendAsync("GameStateUpdated", state);
+    }
+
+    private async Task BroadcastLobbyStatus()
+    {
+        var status = _game.GetLobbyStatus();
+        await Clients.All.SendAsync("LobbyStatus", status);
     }
 }
