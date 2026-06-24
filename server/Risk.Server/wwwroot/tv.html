@@ -8,7 +8,7 @@
         html, body { height: 100%; overflow: hidden; }
         body { background: #000; color: #eee; font-family: system-ui, sans-serif; }
         .map-container { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-        .map-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .map-container img { width: 100%; height: 100%; object-fit: fill; }
         .map-overlay { position: absolute; opacity: 0; transition: opacity 0.3s; }
         .territory { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 2.5vw; height: 2.5vw; max-width: 34px; max-height: 34px; border-radius: 50%; font-size: min(1vw, 13px); font-weight: bold; color: #fff; border: 2px solid rgba(0,0,0,0.5); text-shadow: 1px 1px 1px rgba(0,0,0,0.8); cursor: default; transition: background 0.4s, transform 0.3s; }
         .territory:hover::after { content: attr(data-name); position: absolute; top: -22px; white-space: nowrap; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px; }
@@ -26,7 +26,7 @@
         .t-label { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 8px; white-space: nowrap; color: #fff; text-shadow: 1px 1px 2px #000; margin-top: 1px; }
 
         /* Info panel */
-        .info-panel { position: fixed; bottom: 12px; left: 24px; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 8px; padding: 10px 14px; z-index: 100; min-width: 240px; max-width: 300px; color: #451a03; }
+        .info-panel { position: fixed; bottom: 12px; left: 24px; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 8px; padding: 8px 12px; z-index: 100; min-width: 180px; max-width: 220px; color: #451a03; }
         .info-panel .top-line { font-size: 11px; color: #78350f; margin-bottom: 4px; }
         .info-panel .now-playing { font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
         .info-panel .now-playing .dot { width: 12px; height: 12px; border-radius: 50%; }
@@ -44,12 +44,12 @@
         .no-game { color: #666; font-style: italic; padding: 24px; }
 
         /* Mute toggle */
-        .mute-btn { position: fixed; bottom: 12px; right: 12px; z-index: 100; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
+        .mute-btn { position: fixed; top: 12px; right: 24px; z-index: 100; background: rgba(254,243,199,0.92); border: 2px solid #92400e99; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
     </style>
 </head>
 <body>
     <div class="map-container" id="map" style="display:none;">
-        <img src="/risk-board-game-map-cropped.jpg" alt="Risk Map" />
+        <img src="/board-lined-blue.png" alt="Risk Map" />
         <div class="map-overlay" id="map-overlay"></div>
     </div>
 
@@ -72,7 +72,6 @@
         const sounds = {
             dice:       new Audio('/sounds/dice.mp3'),
             capture:    new Audio('/sounds/army-rank-up.mp3'),
-            blitz:      new Audio('/sounds/blitz.mp3'),
             eliminated: new Audio('/sounds/eliminated.mp3'),
             turn:       new Audio('/sounds/turn.mp3'),
             card:       new Audio('/sounds/card.mp3'),
@@ -217,8 +216,9 @@
             const player = s.players[s.currentPlayerIndex];
             const colour = player ? player.colour : '#999';
             const name = player ? player.name : '?';
+            console.log("lasteState", s);
 
-            let html = `<div class="top-line" id="top-line">Connected ${code} · ${s.turnPhase || s.phase}</div>`;
+            let html = `<div class="top-line" id="top-line">Connected ${code} · ${!s.phase.includes("Initial") ? s.turnPhase || s.phase : "Initial Placement"}</div>`;
             html += `<div class="now-playing"><img src="${avatarUrl(player?.avatarIndex ?? 0)}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${colour};object-fit:contain;" />${name}<span class="timer" id="turn-timer">0s</span></div>`;
             html += `<div class="activity" id="activity-feed"></div>`;
             infoPanel.innerHTML = html;
@@ -233,13 +233,35 @@
         }, 1000);
 
         // --- Territory name helper ---
+        const shortNames = {
+            "Eastern United States": "East. US",
+            "Western United States": "West. US",
+            "Central America": "C. America",
+            "North Africa": "N. Africa",
+            "South Africa": "S. Africa",
+            "East Africa": "E. Africa",
+            "Western Europe": "W. Europe",
+            "Northern Europe": "N. Europe",
+            "Southern Europe": "S. Europe",
+            "Southeast Asia": "SE. Asia",
+            "Middle East": "Mid. East",
+            "New Guinea": "N. Guinea",
+            "Eastern Australia": "E. Australia",
+            "Western Australia": "W. Australia",
+            "Northwest Territory": "NW. Terr.",
+            "Great Britain": "Gr. Britain",
+        };
         function tName(id) {
+            const name = lastState?.territories?.[id]?.name || `#${id}`;
+            return shortNames[name] || name;
+        }
+        function tFullName(id) {
             return lastState?.territories?.[id]?.name || `#${id}`;
         }
         function pName(idx) {
             const p = lastState?.players?.[idx];
             if (!p) return 'Player';
-            return `<img src="${avatarUrl(p.avatarIndex)}" style="width:16px;height:16px;border-radius:50%;display:inline-block;vertical-align:middle;border:1px solid ${p.colour};margin-right:3px;object-fit:contain;" />${p.name}`;
+            return p.name;
         }
         function pColour(idx) {
             return lastState?.players?.[idx]?.colour || '#999';
@@ -332,7 +354,7 @@
             if (result.attackerLosses > 0) pulseDot(result.sourceId, 'pulse-shrink');
             if (result.captured) {
                 pulseDot(result.targetId, 'pulse-capture');
-                showPopup(`⚔️ ${pName(lastState?.currentPlayerIndex)} captures ${tName(result.targetId)}!`);
+                showPopup(`⚔️ ${pName(lastState?.currentPlayerIndex)} captures ${tFullName(result.targetId)}!`);
             }
         });
 
@@ -340,10 +362,10 @@
             playSound('dice');
             if (result.captured) setTimeout(() => playSound('capture'), 1000);
             else setTimeout(() => playSound('fail'), 1000);
-            addActivity(`⚡ Blitz ${tName(result.sourceId)} → ${tName(result.targetId)}: ${result.rounds} rounds`);
+            addActivity(`⚡ ${tName(result.sourceId)} → ${tName(result.targetId)}: ${result.rounds} rounds`);
             if (result.captured) {
                 pulseDot(result.targetId, 'pulse-capture');
-                showPopup(`⚡ ${pName(lastState?.currentPlayerIndex)} blitzes ${tName(result.targetId)}!`);
+                showPopup(`⚡ ${pName(lastState?.currentPlayerIndex)} blitzes ${tFullName(result.targetId)}!`);
             }
         });
 

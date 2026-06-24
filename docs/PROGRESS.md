@@ -585,3 +585,40 @@
 ---
 
 *Updated: 2026-06-23 22:03*
+
+
+---
+
+## 2026-06-24 Evening — Handset UI Fixes, TV Board Polish, AI Timing
+
+### Completed
+
+- **Placement/Reinforce +1 button** — refactored territory rows to discrete `+1` and `All` buttons (right side), territory name still tappable for +1 (backward compat). Army count restored next to name.
+- **Truncation fix** — long territory names (e.g. "Eastern United States") now truncate with ellipsis. Buttons stay fixed width (`w-12 shrink-0`) so they never get pushed off screen. Name uses `min-w-0 flex-1`.
+- **Disabled state** — name tap, +1, and All buttons all disabled/greyed when reinforcements remaining = 0.
+- **TV board image resized to 16:9** — height 944px × width 1678px. Fills TV screen with no black bars. Dot overlays follow (percentage-based).
+- **Map fill mode** — switched from `object-fit: contain` to `width: 100%; height: 100%; object-fit: fill`. Eliminates black line at bottom.
+- **Info panel narrowed** — `min-width: 180px; max-width: 220px` (was 240/300). Tighter padding.
+- **Abbreviated territory names in info panel** — `shortNames` lookup (e.g. "Eastern United States" → "East. US", "North Africa" → "N. Africa", "Northwest Territory" → "NW. Terr."). Popups still use full names via `tFullName()`.
+- **Avatar removed from activity feed** — coloured dot `⬤` + player name only. Saves width in info panel.
+- **Mute button moved to top-right** — was bottom-right, now `top: 12px; right: 24px`.
+- **AI turn delay** — bots now wait 2.5–3s before starting their turn, letting the TV turn popup display and clear first.
+- **AI Tier 4 plan updated** — added "Advanced Capabilities" section: game-tree lookahead, opponent modelling, alliance/threat diplomacy, adaptive personality shifting.
+
+### Files Changed
+
+- `handset/src/components/PlacementScreen.tsx` — +1 button, army count, truncation, disabled state
+- `handset/src/components/ReinforceScreen.tsx` — +1 button, army count, truncation, disabled state
+- `server/Risk.Server/wwwroot/tv.html` — map fill, info panel narrow, shortNames, pName simplified, mute btn moved
+- `server/Risk.Server/Services/AiService.cs` — 2.5–3s initial delay in RunTurnAsync
+- `docs/AI-TIER4-PLAN.md` — advanced capabilities section added
+
+### Status
+
+- Ready for live playtesting with real players
+- Only using Tier 3 AI going forward
+- Tier 4 (personality-based + advanced capabilities) is next major AI milestone
+
+---
+
+*Updated: 2026-06-24 21:04*

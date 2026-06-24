@@ -57,6 +57,9 @@ app.MapGet("/admin/missions", (GameService game) =>
 app.MapGet("/board", (IWebHostEnvironment env) =>
     Results.File(Path.Combine(env.WebRootPath, "tv.html"), "text/html"));
 
+app.MapGet("/guide", (IWebHostEnvironment env) =>
+    Results.File(Path.Combine(env.WebRootPath, "guide.html"), "text/html"));
+
 // ML: train blitz model (run once, then it's loaded for AI)
 app.MapGet("/admin/train", (IWebHostEnvironment env, MlModels ml) =>
 {

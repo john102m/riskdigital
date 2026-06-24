@@ -18,6 +18,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
     {
         try
         {
+            await Delay(2500, 3000); // let turn popup display on TV
+
             var state = game.State!;
             var player = state.Players[state.CurrentPlayerIndex];
             var connId = player.ConnectionId;

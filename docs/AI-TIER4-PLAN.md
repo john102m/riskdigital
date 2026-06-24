@@ -89,6 +89,34 @@ Each personality applies this differently:
 - Tier 3 becomes the base evaluation engine; Tier 4 applies personality weights on top
 - Character selection: host picks from a list, or random assignment
 
+## Advanced Capabilities (Beyond Personality Weights)
+
+### Game-Tree Lookahead
+- Evaluate 2–3 turns ahead before committing to attacks
+- Score board positions after hypothetical moves (continent completion paths, vulnerability)
+- Prune branches where outcome probability is < 20% (use ML blitz model for predictions)
+- Keeps AI from making moves that win a battle but lose the war
+
+### Opponent Modelling
+- Track each player's reinforcement patterns (which continent are they building?)
+- Detect when an opponent is 1–2 territories from completing a continent
+- Prioritise blocking moves when opponent continent completion is imminent
+- Score threat level per player (territories × armies × continent progress)
+
+### Alliance/Threat Diplomacy
+- Gang up on the leader (highest territory count or army total)
+- Avoid provoking neighbours when weak (skip attacks on strong adjacent players)
+- Implicit alliance: don't attack a player who's also fighting the leader
+- Kingmaker awareness: avoid moves that hand the win to another player
+
+### Adaptive Personality Shifting
+- Shift between turtle/aggressive based on board position, not just fixed style
+- Carl becomes aggressive when he has overwhelming force concentrated
+- Alice becomes cautious when down to < 8 territories
+- Chris pivots continent target if original becomes impossible
+- Ollie switches from elimination hunting to self-preservation when threatened
+
 ---
 
 *Created: 2026-06-21*
+*Updated: 2026-06-24 — added lookahead, opponent modelling, diplomacy, adaptive shifting*
