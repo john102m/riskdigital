@@ -79,7 +79,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
         <p className="text-lg font-bold text-amber-400">Trade cards first ({cards.length} held)</p>
-        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => {}} />
+        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => { }} />
       </div>
     );
   }
@@ -117,26 +117,30 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
           onToggle={(c) => setExpanded((e) => e === c ? null : c)}
           renderButton={(t) => (
             <div key={t.id} className="flex items-center gap-1 w-full">
-              <button
-                onClick={() => { tap(); reinforce(t.id, 1); }}
-                onContextMenu={(e) => e.preventDefault()}
-                disabled={me.reinforcementsRemaining <= 0}
-                className={`w-[70%] text-left px-2 py-2 rounded-l flex justify-between items-center border border-white/10 touch-manipulation
-                  ${me.reinforcementsRemaining > 0 ? "active:scale-95 active:brightness-150 transition-all" : "opacity-50"}`}
+              <span
+                onClick={() => { if (me.reinforcementsRemaining > 0) { heavyTap(); reinforce(t.id, 1); } }}
                 style={{ backgroundColor: me.colour + "33" }}
-              >
-                <span className="font-medium text-sm truncate">{t.name}</span>
-                <span className="text-sm font-bold ml-1 w-5 text-right">{t.armies}</span>
-              </button>
+                className={`font-medium min-w-0 flex-1 px-2 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation cursor-pointer ${me.reinforcementsRemaining <= 0 ? "opacity-50 pointer-events-none" : ""}`}
+              ><span className="truncate">{t.name}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
               <button
                 onClick={() => { heavyTap(); reinforce(t.id, me.reinforcementsRemaining); }}
+                disabled={me.reinforcementsRemaining <= 0 ? true : false}
                 onContextMenu={(e) => e.preventDefault()}
-                disabled={me.reinforcementsRemaining <= 0}
-                className={`w-[30%] px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 active:scale-95 active:brightness-150 transition-all touch-manipulation
-                  ${me.reinforcementsRemaining <= 0 ? "opacity-50" : ""}`}
+                className={`w-12 shrink-0 px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 active:scale-95 active:brightness-150 transition-all touch-manipulation
+                 ${me.reinforcementsRemaining <= 0 ? "opacity-50" : ""}`}
               >
                 All
               </button>
+              <button
+                onClick={() => { heavyTap(); reinforce(t.id, 1); }}
+                disabled={me.reinforcementsRemaining <= 0 ? true : false}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`w-12 shrink-0 px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 active:scale-95 active:brightness-150 transition-all touch-manipulation
+                 ${me.reinforcementsRemaining <= 0 ? "opacity-50" : ""}`}
+              >
+                +1
+              </button>
+
             </div>
           )}
         />

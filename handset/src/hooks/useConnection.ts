@@ -20,7 +20,10 @@ export function useConnection() {
       .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000])
       .build();
 
-    conn.on("GameStateUpdated", (state: GameState) => setGameState(state));
+    conn.on("GameStateUpdated", (state: GameState) => {
+      setGameState(state);
+      if (state?.phase === "Lobby") { setCards([]); setMission(null); setForcedTrade(false); }
+    });
     conn.on("CardsUpdated", (hand: Card[]) => setCards(hand));
     conn.on("MissionUpdated", (m: Mission) => setMission(m));
     conn.on("ForcedTradeRequired", (hand: Card[]) => {

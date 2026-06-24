@@ -3,7 +3,7 @@ import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { ContinentAccordion } from "./ContinentAccordion";
-import { tap, heavyTap } from "../utils/vibrate";
+import { heavyTap } from "../utils/vibrate";
 
 interface Props {
   connection: HubConnection;
@@ -52,22 +52,26 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
           onToggle={(c) => setExpanded((e) => e === c ? null : c)}
           renderButton={(t) => (
             <div key={t.id} className="flex items-center gap-1 w-full">
-              <button
-                onClick={() => { tap(); placeArmy(t.id, 1); }}
-                onContextMenu={(e) => e.preventDefault()}
+              <span
+                onClick={() => { if (me.reinforcementsRemaining > 0) { heavyTap(); placeArmy(t.id, 1); } }}
                 style={{ backgroundColor: me.colour + "33" }}
-                className="w-[70%] px-3 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation"
-              >
-                <span className="font-medium truncate">{t.name}</span>
-                <span className="font-bold ml-1">{t.armies}</span>
-              </button>
+                className={`font-medium min-w-0 flex-1 px-2 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation cursor-pointer ${me.reinforcementsRemaining <= 0 ? "opacity-50 pointer-events-none" : ""}`}
+              ><span className="truncate">{t.name}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
               <button
                 onClick={() => { heavyTap(); placeArmy(t.id, me.reinforcementsRemaining); }}
                 onContextMenu={(e) => e.preventDefault()}
                 disabled
-                className="w-[30%] px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 transition-all touch-manipulation opacity-30"
+                className="w-12 shrink-0 px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 transition-all touch-manipulation opacity-30"
               >
                 All
+              </button>
+              <button
+                onClick={() => { heavyTap(); placeArmy(t.id, 1); }}
+                onContextMenu={(e) => e.preventDefault()}
+                disabled={me.reinforcementsRemaining <= 0 ? true : false}
+                className="w-12 shrink-0 px-2 py-2 rounded-r bg-white/10 border border-white/10 text-xs font-bold text-amber-300 transition-all touch-manipulation"
+              >
+                +1
               </button>
             </div>
           )}

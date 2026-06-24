@@ -15,6 +15,7 @@ public class GameService
     private GameState? _state;
 
     public GameState? State => _state;
+    public TerritoryData MapData => _territoryData;
 
     public GameService()
     {
