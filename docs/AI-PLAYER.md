@@ -87,13 +87,16 @@ Server-driven AI players that participate like humans. Same SignalR events, same
 
 ## Mission Concealment (Tier 3+)
 
-Human players know missions exist and watch for tells. A smart AI should:
-- **Misdirect** — attack territories outside its mission targets early to disguise intent
-- **Delay commitment** — don't complete the second continent until you can take it in one turn (or close to)
+**Status: NOT IMPLEMENTED — noted for future**
+
+Current AI pursues missions transparently. Observant humans can read the pattern.
+
+Planned improvements:
+- **Misdirect** — attack territories outside mission targets early to disguise intent
+- **Delay commitment** — don't complete the second continent until you can take it in one turn
 - **Spread pressure** — maintain presence on multiple fronts so opponents can't deduce the target
 - **Sprint at the end** — once committed, go all-in before others react
-- This mirrors what experienced humans do ("I know everyone knows the missions, so I feint")
-- **Reinforcement misdirection**: for "18 territories with 2+ armies" mission, don't evenly spread 2 everywhere early — that signals the mission. Instead, reinforce strategically (fronts, big stacks) and only distribute the 2s when ready to sprint for the win
+- **Early game strategic awareness** — grab small continents (Australia, South America) regardless of mission for the bonus income
 
 ---
 
