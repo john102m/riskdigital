@@ -87,7 +87,20 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Broadcast();
         }
 
-        if (player.AiTier >= 2)
+        if (player.AiTier >= 4)
+        {
+            var w = PersonalityWeights.For(player.Personality ?? AiPersonality.Opportunist);
+            // Trade based on CardHoarding weight
+            var set = FindValidSet(player.Cards);
+            if (set is not null && (w.CardHoarding < 0.3f || (w.CardHoarding < 0.7f && player.Cards.Count >= 4) || HasTerritoryBonusSet(state, player)))
+            {
+                await Delay((int)(2000 * w.TimingMultiplier), (int)(2500 * w.TimingMultiplier));
+                game.TradeCards(connId, set);
+                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, 0);
+                await Broadcast();
+            }
+        }
+        else if (player.AiTier >= 2)
         {
             // Tier 2: trade immediately if able
             // Tier 3: trade if have territory bonus card OR 4+ cards (save for strategic moment)
@@ -104,10 +117,15 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         // Place armies
         while (player.ReinforcementsRemaining > 0)
         {
-            await Delay(1500, 2000);
+            var w = player.AiTier >= 4 ? PersonalityWeights.For(player.Personality ?? AiPersonality.Opportunist) : null;
+            await Delay(w is not null ? (int)(1500 * w.TimingMultiplier) : 1500, w is not null ? (int)(2000 * w.TimingMultiplier) : 2000);
             var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
             Territory target;
-            if (player.AiTier >= 3)
+            if (player.AiTier >= 4)
+            {
+                target = ScoreTier4ReinforceTarget(state, owned, w!);
+            }
+            else if (player.AiTier >= 3)
             {
                 // Tier 3: strategic reinforce — continent gap territories get priority
                 target = ScoreReinforceTarget(state, owned);
@@ -138,6 +156,11 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
     private async Task RunAttack(GameState state, Player player, string connId)
     {
+        if (player.AiTier >= 4)
+        {
+            await RunTier4Attack(state, player, connId);
+            return;
+        }
         if (player.AiTier >= 3)
         {
             await RunStrategicAttack(state, player, connId);
@@ -396,6 +419,11 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
     private async Task RunFortify(GameState state, Player player, string connId)
     {
+        if (player.AiTier >= 4)
+        {
+            await RunTier4Fortify(state, player, connId);
+            return;
+        }
         if (player.AiTier >= 3)
         {
             await RunStrategicFortify(state, player, connId);
@@ -518,6 +546,328 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
         TriggerIfAi();
+    }
+
+    // --- Tier 4: Enhanced Heuristics + Personality ---
+
+    private async Task RunTier4Attack(GameState state, Player player, string connId)
+    {
+        var w = PersonalityWeights.For(player.Personality ?? AiPersonality.Opportunist);
+        int myIndex = state.CurrentPlayerIndex;
+        int maxAttacks = (int)(8 * w.ExpansionSpeed);
+
+        for (int i = 0; i < maxAttacks; i++)
+        {
+            // Stop after earning a card if preservation is high
+            if (player.EarnedCardThisTurn && i > 0 && w.ArmyPreservation > 0.5f) break;
+
+            var sources = state.Territories
+                .Where(t => t.OwnerId == myIndex && t.Armies > 1
+                    && t.Adjacent.Any(a => state.Territories[a].OwnerId != myIndex))
+                .ToList();
+
+            if (state.HouseRules.LockedAttackFront && state.AttackFrontIds.Count > 0)
+                sources = sources.Where(t => state.AttackFrontIds.Contains(t.Id)).ToList();
+
+            if (sources.Count == 0) break;
+
+            Territory? bestSource = null;
+            Territory? bestTarget = null;
+            float bestScore = 0;
+
+            foreach (var src in sources)
+            {
+                var targets = src.Adjacent
+                    .Select(a => state.Territories[a])
+                    .Where(t => t.OwnerId != myIndex)
+                    .ToList();
+
+                foreach (var tgt in targets)
+                {
+                    float score = ScoreTier4Attack(state, src, tgt, w, myIndex, player.AiTier);
+                    if (score > bestScore) { bestScore = score; bestSource = src; bestTarget = tgt; }
+                }
+            }
+
+            // Threshold based on army preservation
+            float threshold = 0.3f + (w.ArmyPreservation * 0.3f);
+            if (bestSource is null || bestTarget is null || bestScore < threshold) break;
+
+            // Show selection
+            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, (int?)null);
+            await Delay((int)(1000 * w.TimingMultiplier), (int)(1500 * w.TimingMultiplier));
+            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
+            await Delay((int)(1500 * w.TimingMultiplier), (int)(2000 * w.TimingMultiplier));
+
+            float captureChance = ml.PredictBlitz(bestSource.Armies, bestTarget.Armies);
+            if (captureChance > 0.6f && bestSource.Armies >= 4)
+            {
+                var (_, blitzResult) = game.Blitz(connId, bestSource.Id, bestTarget.Id);
+                await hub.Clients.All.SendAsync("BlitzResult", blitzResult);
+                await Broadcast();
+
+                if (blitzResult.Captured)
+                {
+                    await Delay((int)(1500 * w.TimingMultiplier), (int)(2000 * w.TimingMultiplier));
+                    int moveArmies = (int)((bestSource.Armies - 1) * w.ExpansionSpeed);
+                    moveArmies = Math.Max(moveArmies, Math.Min(3, bestSource.Armies - 1));
+                    moveArmies = Math.Min(moveArmies, bestSource.Armies - 1);
+                    if (moveArmies > 0)
+                    {
+                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, moveArmies);
+                        await Broadcast();
+                    }
+                    if (state.Phase == GamePhase.GameOver) return;
+                }
+            }
+            else
+            {
+                int dice = Math.Min(3, bestSource.Armies - 1);
+                var (_, result) = game.Attack(connId, bestSource.Id, bestTarget.Id, dice);
+                await hub.Clients.All.SendAsync("CombatResult", result);
+                await Broadcast();
+
+                if (result.Captured)
+                {
+                    await Delay((int)(1500 * w.TimingMultiplier), (int)(2000 * w.TimingMultiplier));
+                    int max = bestSource.Armies - 1;
+                    if (max > 0)
+                    {
+                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        await Broadcast();
+                    }
+                    if (state.Phase == GamePhase.GameOver) return;
+                }
+            }
+
+            await Delay((int)(2000 * w.TimingMultiplier), (int)(3000 * w.TimingMultiplier));
+        }
+
+        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await EndAttack(state, player, connId);
+    }
+
+    private async Task RunTier4Fortify(GameState state, Player player, string connId)
+    {
+        var w = PersonalityWeights.For(player.Personality ?? AiPersonality.Opportunist);
+        int myIndex = state.CurrentPlayerIndex;
+        await Delay((int)(1500 * w.TimingMultiplier), (int)(2500 * w.TimingMultiplier));
+
+        // Opportunist: fortify toward weakest player's territories
+        if (w.EliminationHunting > 0.5f)
+        {
+            int weakest = FindWeakestPlayer(state, myIndex);
+            var weakTerritories = state.Territories.Where(t => t.OwnerId == weakest).Select(t => t.Id).ToHashSet();
+
+            // Find owned territory adjacent to weakest player with lowest armies
+            var frontVsWeak = state.Territories
+                .Where(t => t.OwnerId == myIndex && t.Adjacent.Any(a => weakTerritories.Contains(a)))
+                .OrderBy(t => t.Armies)
+                .FirstOrDefault();
+
+            if (frontVsWeak is not null)
+            {
+                // Find adjacent owned territory with surplus to donate
+                var donor = frontVsWeak.Adjacent
+                    .Select(a => state.Territories[a])
+                    .Where(t => t.OwnerId == myIndex && t.Armies > 2 && t.Id != frontVsWeak.Id)
+                    .OrderByDescending(t => t.Armies)
+                    .FirstOrDefault();
+
+                if (donor is not null)
+                {
+                    int armies = donor.Armies - 1;
+                    game.Fortify(connId, donor.Id, frontVsWeak.Id, armies);
+                    await hub.Clients.All.SendAsync("FortifyMoved", myIndex, donor.Id, frontVsWeak.Id, armies);
+                    await Broadcast();
+                    await Delay(1000, 1500);
+                    game.EndTurn(connId);
+                    await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+                    await Broadcast();
+                    TriggerIfAi();
+                    return;
+                }
+            }
+        }
+
+        // Fallback: strategic fortify (protect continent borders)
+        var (source, target) = FindStrategicFortify(state);
+        if (source is not null && target is not null)
+        {
+            int armies = source.Armies - 1;
+            game.Fortify(connId, source.Id, target.Id, armies);
+            await hub.Clients.All.SendAsync("FortifyMoved", myIndex, source.Id, target.Id, armies);
+            await Broadcast();
+        }
+        else
+        {
+            await RunAggressiveFortifyLogic(state, connId);
+        }
+
+        await Delay(1000, 1500);
+        game.EndTurn(connId);
+        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Broadcast();
+        TriggerIfAi();
+    }
+
+    private Territory ScoreTier4ReinforceTarget(GameState state, List<Territory> owned, PersonalityWeights w)
+    {
+        int myIndex = state.CurrentPlayerIndex;
+        int weakest = FindWeakestPlayer(state, myIndex);
+        var weakTerritories = state.Territories.Where(t => t.OwnerId == weakest).Select(t => t.Id).ToHashSet();
+
+        Territory? best = null;
+        float bestScore = -1;
+
+        foreach (var t in owned)
+        {
+            bool isBorder = t.Adjacent.Any(a => state.Territories[a].OwnerId != myIndex);
+            if (!isBorder) continue;
+
+            float score = 0;
+
+            // Adjacent to weakest player (elimination hunting)
+            if (t.Adjacent.Any(a => weakTerritories.Contains(a)))
+                score += 10f * w.EliminationHunting;
+
+            // Continent completion (gateway to finishing a continent)
+            foreach (var continent in game.MapData.Continents)
+            {
+                int ownedInCont = continent.Territories.Count(id => state.Territories[id].OwnerId == myIndex);
+                int total = continent.Territories.Count;
+                float progress = (float)ownedInCont / total;
+
+                if (progress >= 0.6f && t.Adjacent.Any(a => continent.Territories.Contains(a) && state.Territories[a].OwnerId != myIndex))
+                    score += continent.Bonus * 3f * w.ContinentPriority;
+
+                if (ownedInCont == total && t.Adjacent.Any(a => !continent.Territories.Contains(a) && state.Territories[a].OwnerId != myIndex))
+                    score += continent.Bonus * 2f * w.ContinentPriority;
+            }
+
+            // Continent denial (block opponent near completion)
+            score += ScoreContinentDenial(state, t, myIndex) * w.ContinentDenial;
+
+            // Chokepoint value
+            if (IsChokepoint(t))
+                score += 5f;
+
+            // Shore up weak points
+            int enemyThreat = t.Adjacent.Where(a => state.Territories[a].OwnerId != myIndex).Sum(a => state.Territories[a].Armies);
+            score += Math.Max(0, enemyThreat - t.Armies) * w.ArmyPreservation;
+
+            if (score > bestScore) { bestScore = score; best = t; }
+        }
+
+        return best ?? owned[Random.Shared.Next(owned.Count)];
+    }
+
+    private float ScoreTier4Attack(GameState state, Territory source, Territory target, PersonalityWeights w, int myIndex, int tier = 4)
+    {
+        float mlScore = ml.PredictBlitz(source.Armies, target.Armies);
+
+        // Base: must meet ratio threshold
+        float ratio = (float)source.Armies / Math.Max(1, target.Armies);
+        if (ratio < w.AttackRatioThreshold && mlScore < 0.5f) return 0;
+
+        float score = mlScore * (1f - w.ArmyPreservation * 0.5f);
+
+        // Elimination hunting: bonus for attacking nearly-dead players
+        int targetOwner = target.OwnerId;
+        int targetTerritoryCount = state.Territories.Count(t => t.OwnerId == targetOwner);
+        if (targetTerritoryCount <= 2)
+            score += (3f - targetTerritoryCount) * w.EliminationHunting;
+        else if (targetTerritoryCount <= 4)
+            score += 0.5f * w.EliminationHunting;
+
+        // Card escalation: eliminations worth more as trade count rises
+        if (targetTerritoryCount == 1)
+            score += Math.Min(state.CardTradeCount * 0.1f, 1.0f) * w.EliminationHunting;
+
+        // Continent completion bonus
+        foreach (var continent in game.MapData.Continents)
+        {
+            if (!continent.Territories.Contains(target.Id)) continue;
+            int ownedInCont = continent.Territories.Count(id => state.Territories[id].OwnerId == myIndex);
+            int total = continent.Territories.Count;
+            if (ownedInCont == total - 1)
+                score += continent.Bonus * 0.5f * w.ContinentPriority;
+            else if ((float)ownedInCont / total >= 0.6f)
+                score += continent.Bonus * 0.2f * w.ContinentPriority;
+        }
+
+        // Continent denial: block opponent from completing
+        score += ScoreContinentDenialAttack(state, target, myIndex) * w.ContinentDenial;
+
+        // Chokepoint value
+        if (IsChokepoint(target))
+            score += 0.3f;
+
+        // Tier 5: blend learned human behaviour
+        if (tier >= 5)
+        {
+            float humanScore = ml.PredictHumanAttack(source.Armies, target.Armies, targetTerritoryCount, 1f, 0f);
+            score = score * 0.7f + humanScore * 0.3f;
+        }
+
+        return score;
+    }
+
+    // --- Tier 4 Heuristic Helpers ---
+
+    private int FindWeakestPlayer(GameState state, int myIndex)
+    {
+        return state.Players
+            .Select((p, i) => (p, i))
+            .Where(x => !x.p.IsEliminated && x.i != myIndex)
+            .OrderBy(x => state.Territories.Count(t => t.OwnerId == x.i))
+            .First().i;
+    }
+
+    private float ScoreContinentDenial(GameState state, Territory t, int myIndex)
+    {
+        float score = 0;
+        foreach (var continent in game.MapData.Continents)
+        {
+            if (!continent.Territories.Contains(t.Id)) continue;
+            // Check if any opponent is close to owning this continent
+            for (int p = 0; p < state.Players.Count; p++)
+            {
+                if (p == myIndex || state.Players[p].IsEliminated) continue;
+                int theirCount = continent.Territories.Count(id => state.Territories[id].OwnerId == p);
+                int total = continent.Territories.Count;
+                if (theirCount >= total - 1)
+                    score += continent.Bonus * 3f; // they're 1 away — critical block
+                else if (theirCount >= total - 2)
+                    score += continent.Bonus * 1f;
+            }
+        }
+        return score;
+    }
+
+    private float ScoreContinentDenialAttack(GameState state, Territory target, int myIndex)
+    {
+        float score = 0;
+        int targetOwner = target.OwnerId;
+        foreach (var continent in game.MapData.Continents)
+        {
+            if (!continent.Territories.Contains(target.Id)) continue;
+            int theirCount = continent.Territories.Count(id => state.Territories[id].OwnerId == targetOwner);
+            int total = continent.Territories.Count;
+            // Taking this territory blocks them from completing
+            if (theirCount >= total - 1)
+                score += continent.Bonus * 2f;
+            else if ((float)theirCount / total >= 0.7f)
+                score += continent.Bonus * 0.5f;
+        }
+        return score;
+    }
+
+    private static bool IsChokepoint(Territory t)
+    {
+        // Territories with high adjacency that gate multiple continents
+        return t.Adjacent.Count >= 5 || t.Name is "Ukraine" or "Middle East" or "North Africa"
+            or "Siam" or "Central America" or "East Africa";
     }
 
     // --- Strategic Helpers (Tier 3) ---

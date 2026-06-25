@@ -6,7 +6,8 @@
 
 | File | Purpose |
 |------|---------|
-| `Program.cs` | Entry point. ASP.NET minimal API, SignalR config, CORS, static files, admin endpoints (`/admin/reset`, `/admin/gameover`, `/admin/missions`) |
+| `Program.cs` | Entry point. ASP.NET minimal API, SignalR config, CORS, static files, ML model loading at startup. |
+| `EndPointConfig/ManagementEndpoints.cs` | All admin/utility endpoints (see Admin Endpoints table below) |
 | `Hubs/GameHub.cs` | SignalR hub — thin relay. All client↔server methods (CreateGame, JoinGame, Attack, Blitz, etc). Delegates to GameService. |
 | `Services/GameService.cs` | Singleton. All game logic: combat resolution, reinforcement calc, card trading, mission checking, territory dealing, turn management. |
 | `Services/AiService.cs` | AI player turn runner. Triggered when current player is AI. Tier 1 (random) with delays for natural pacing. |
@@ -21,6 +22,22 @@
 | `wwwroot/sounds/` | Audio files: dice, capture, blitz, fail, alert, eliminated, turn, card, fortify, victory, place |
 | `wwwroot/avatars/` | 9 player avatar PNGs (avatar_0 through avatar_8) |
 | `wwwroot/assets/` | Vite build output (JS/CSS bundles — auto-generated, don't edit) |
+
+### Admin & Utility Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/admin/reset` | GET | Reset game state. `?debug=true` for reduced armies. |
+| `/admin/gameover` | GET | Force game over (testing). |
+| `/admin/missions` | GET | Show all players' missions (debug). |
+| `/admin/train` | GET | Train all ML models (blitz from simulation + behaviour from player logs). |
+| `/admin/ml-status` | GET | Report which ML models are loaded + sample predictions. |
+| `/admin/app-log` | GET | Last 300 log lines (plain text). Ring buffer — no file I/O. |
+| `/admin/logs-status` | GET | Show active log directory, writability, file list. |
+| `/admin/logs-download` | GET | Download all log CSVs as zip. |
+| `/admin/logs-upload` | POST | Upload zip of CSVs to restore training data. |
+| `/board` | GET | Serve TV web board (tv.html). |
+| `/guide` | GET | Serve player guide (guide.html). |
 
 ---
 

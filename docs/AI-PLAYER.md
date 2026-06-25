@@ -40,6 +40,21 @@ Server-driven AI players that participate like humans. Same SignalR events, same
   - Opportunist Ollie — targets weakest player, steals cards
 - Adaptive timing — mirrors human pace
 
+## Quick Reference — Lobby Buttons
+
+| Button | Play Style |
+|---|---|
+| 🤖 **Tier-1** | Random. Places/attacks/fortifies randomly. Zero strategy — just fills a seat. |
+| ⚔️ **Tier-2** | Aggressive heuristic. Always attacks weakest neighbour, blitzes at 5+, reinforces frontline, fortifies rear→front. Predictable but active. |
+| 🧠 **Tier-3** | Strategic + ML. Uses a trained model to judge attack odds. Scores targets by continent completion. Stops attacking after earning a card. Smart reinforce/fortify. |
+| 🦊 **Tier-4** | Enhanced heuristics. Hunts eliminations for card steals, values chokepoints, continent denial, fast tempo. Single personality (Opportunist). |
+| 🧬 **Tier-5 Opportunist** | Tier-4 brain + learns from your play data. Hunts weak players, fast tempo. |
+| 🧬 **Tier-5 Cautious** | Learns from your data + only attacks at 4:1 ratio, hoards cards, turtles up, slow expansion. |
+| 🧬 **Tier-5 Aggressive** | Learns from your data + attacks at 1.5:1, max expansion, doesn't preserve armies, fastest tempo. |
+| 🧬 **Tier-5 Continental** | Learns from your data + prioritises continent completion, blocks opponents near completing theirs. |
+
+---
+
 ## Key Decisions
 
 - **When to attack:** threshold-based (army ratio vs neighbour)

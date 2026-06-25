@@ -1,5 +1,6 @@
 import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
+import { useState } from "react";
 
 const SERVER = import.meta.env.VITE_SERVER_URL || "";
 const AVATARS = ["female-1", "female-2", "female-3", "female-4", "female-5", "female-6", "male-1", "male-2", "male-3"];
@@ -12,6 +13,7 @@ interface Props {
 
 export function LobbyScreen({ connection, gameState, playerName }: Props) {
   const isHost = gameState.players.find((p) => p.name === playerName)?.isHost;
+  const [showT5, setShowT5] = useState(false);
 
   const startGame = async () => {
     try {
@@ -21,9 +23,10 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     }
   };
 
-  const addAI = async (tier: number) => {
+  const addAI = async (tier: number, personality?: string) => {
     try {
-      await connection.invoke("AddAI", tier);
+      await connection.invoke("AddAI", tier, personality ?? null);
+      setShowT5(false);
     } catch (e: any) {
       alert(e.message);
     }
@@ -67,16 +70,35 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
       {isHost && (
         <div className="mt-4 flex flex-col gap-3 items-center">
           {gameState.players.length < 6 && (
-            <div className="flex gap-2">
-              <button onClick={() => addAI(1)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                🤖 Tier-1
-              </button>
-              <button onClick={() => addAI(2)} className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                ⚔️ Tier-2
-              </button>
-              <button onClick={() => addAI(3)} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                🧠 Tier-3
-              </button>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <div className="flex gap-2">
+                <button onClick={() => addAI(1)} className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                  🤖 Tier-1
+                </button>
+                <button onClick={() => addAI(2)} className="flex-1 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                  ⚔️ Tier-2
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => addAI(3)} className="flex-1 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                  🧠 Tier-3
+                </button>
+                <button onClick={() => addAI(4)} className="flex-1 bg-amber-600 hover:bg-amber-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                  🦊 Tier-4
+                </button>
+                <button onClick={() => setShowT5(!showT5)} className="flex-1 bg-rose-600 hover:bg-rose-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+                  🧬 Tier-5
+                </button>
+              </div>
+              {showT5 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => addAI(5, "Opportunist")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🦊 Opportunist</button>
+                  <button onClick={() => addAI(5, "Cautious")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🛡️ Cautious</button>
+                  <button onClick={() => addAI(5, "Aggressive")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🔥 Aggressive</button>
+                  <button onClick={() => addAI(5, "Continental")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🗺️ Continental</button>
+                  <button onClick={() => addAI(5)} className="col-span-2 bg-rose-900 hover:bg-rose-950 px-3 py-2 rounded-lg text-xs font-bold transition">🎲 Mystery</button>
+                </div>
+              )}
             </div>
           )}
 

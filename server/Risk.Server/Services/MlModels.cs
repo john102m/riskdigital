@@ -78,4 +78,84 @@ public class MlModels
     }
 
     public bool IsLoaded => _blitzEngine is not null;
+
+    // --- Behaviour models (learned from human players) ---
+
+    private PredictionEngine<ReinforceInput, ScoreOutput>? _reinforceEngine;
+    private PredictionEngine<AttackInput, ScoreOutput>? _attackEngine;
+
+    public class ReinforceInput
+    {
+        public float TerritoryArmies { get; set; }
+        public float IsBorder { get; set; }
+        public float EnemyThreat { get; set; }
+        public float ContinentProgress { get; set; }
+        public float ContinentBonus { get; set; }
+    }
+
+    public class AttackInput
+    {
+        public float SourceArmies { get; set; }
+        public float TargetArmies { get; set; }
+        public float TargetOwnerTerritoryCount { get; set; }
+        public string TargetContinentProgress { get; set; } = "";
+        public string MyContinentProgress { get; set; } = "";
+        public float UsedBlitz { get; set; }
+        public float WouldCompleteCont { get; set; }
+        public float TurnNumber { get; set; }
+        public float DidAttack { get; set; }
+    }
+
+    public class ScoreOutput
+    {
+        [ColumnName("Score")]
+        public float Score { get; set; }
+    }
+
+    public void LoadBehaviourModels(string modelsDir)
+    {
+        if (!Directory.Exists(modelsDir)) return;
+        var mlContext = new MLContext();
+
+        var reinforcePath = Path.Combine(modelsDir, "reinforce-behaviour.zip");
+        if (File.Exists(reinforcePath))
+        {
+            var model = mlContext.Model.Load(reinforcePath, out _);
+            _reinforceEngine = mlContext.Model.CreatePredictionEngine<ReinforceInput, ScoreOutput>(model);
+            Console.WriteLine("Behaviour model loaded: reinforce");
+        }
+
+        var attackPath = Path.Combine(modelsDir, "attack-behaviour.zip");
+        if (File.Exists(attackPath))
+        {
+            var model = mlContext.Model.Load(attackPath, out _);
+            _attackEngine = mlContext.Model.CreatePredictionEngine<AttackInput, ScoreOutput>(model);
+            Console.WriteLine("Behaviour model loaded: attack");
+        }
+    }
+
+    public float PredictHumanReinforce(float armies, float isBorder, float enemyThreat, float continentProgress, float continentBonus)
+    {
+        if (_reinforceEngine is null) return 0.5f;
+        var pred = _reinforceEngine.Predict(new ReinforceInput
+        {
+            TerritoryArmies = armies, IsBorder = isBorder, EnemyThreat = enemyThreat,
+            ContinentProgress = continentProgress, ContinentBonus = continentBonus
+        });
+        return Math.Clamp(pred.Score, 0f, 1f);
+    }
+
+    public float PredictHumanAttack(float sourceArmies, float targetArmies, float targetOwnerTerritories, float usedBlitz, float wouldComplete)
+    {
+        if (_attackEngine is null) return 0.5f;
+        var pred = _attackEngine.Predict(new AttackInput
+        {
+            SourceArmies = sourceArmies, TargetArmies = targetArmies,
+            TargetOwnerTerritoryCount = targetOwnerTerritories, UsedBlitz = usedBlitz, WouldCompleteCont = wouldComplete,
+            TargetContinentProgress = "", MyContinentProgress = "", TurnNumber = 0, DidAttack = 0
+        });
+        return Math.Clamp(pred.Score, 0f, 1f);
+    }
+
+    public bool BehaviourModelsLoaded => _reinforceEngine is not null || _attackEngine is not null;
 }

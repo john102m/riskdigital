@@ -5,6 +5,13 @@ server/**/obj/
 *.suo
 .vs/
 
+# Training data & models (generated, not source)
+server/Risk.Server/Data/logs/
+server/Risk.Server/Data/models/*.zip
+
+# Vite build output (regenerated on deploy)
+server/Risk.Server/wwwroot/assets/
+
 # Node
 handset/node_modules/
 handset/dist/

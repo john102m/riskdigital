@@ -147,6 +147,30 @@ Each turn has 3 phases:
 
 ---
 
+## AI Bots
+
+The host can add AI players in the lobby. Each tier plays differently:
+
+| Button | Play Style |
+|---|---|
+| 🤖 **Tier-1** | Random. Places/attacks/fortifies randomly. Zero strategy — just fills a seat. |
+| ⚔️ **Tier-2** | Aggressive heuristic. Always attacks weakest neighbour, blitzes at 5+, reinforces frontline, fortifies rear→front. Predictable but active. |
+| 🧠 **Tier-3** | Strategic + ML. Uses a trained model to judge attack odds. Scores targets by continent completion. Stops attacking after earning a card. Smart reinforce/fortify. |
+| 🦊 **Tier-4** | Enhanced heuristics. Hunts eliminations for card steals, values chokepoints (Ukraine, Siam, etc.), continent denial, fast tempo. Single personality (Opportunist). |
+| 🧬 **Tier-5 Opportunist** | Tier-4 brain + learns from your play data. Hunts weak players, fast tempo. |
+| 🧬 **Tier-5 Cautious** | Learns from your data + only attacks at 4:1 ratio, hoards cards, turtles up, slow expansion. |
+| 🧬 **Tier-5 Aggressive** | Learns from your data + attacks at 1.5:1, max expansion, doesn't preserve armies, fastest tempo. |
+| 🧬 **Tier-5 Continental** | Learns from your data + prioritises continent completion, blocks opponents near completing theirs. |
+
+**Tips vs AI:**
+- Tier-1/2 are good for practice but won't challenge experienced players
+- Tier-4 can snowball early if left unchecked — gang up on it
+- Tier-5 Aggressive is relentless — leave it alone at your peril
+- Tier-5 Continental is dangerous late game once it locks down a bonus
+- Tier-5 gets smarter the more games you play (it trains on your decisions)
+
+---
+
 ## Key Rules
 
 - **Defender wins ties** on dice
