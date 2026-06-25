@@ -83,6 +83,7 @@ public class MlModels
 
     private PredictionEngine<ReinforceInput, ScoreOutput>? _reinforceEngine;
     private PredictionEngine<AttackInput, ScoreOutput>? _attackEngine;
+    private PredictionEngine<FortifyInput, ScoreOutput>? _fortifyEngine;
 
     public class ReinforceInput
     {
@@ -132,6 +133,14 @@ public class MlModels
             _attackEngine = mlContext.Model.CreatePredictionEngine<AttackInput, ScoreOutput>(model);
             Console.WriteLine("Behaviour model loaded: attack");
         }
+
+        var fortifyPath = Path.Combine(modelsDir, "fortify-behaviour.zip");
+        if (File.Exists(fortifyPath))
+        {
+            var model = mlContext.Model.Load(fortifyPath, out _);
+            _fortifyEngine = mlContext.Model.CreatePredictionEngine<FortifyInput, ScoreOutput>(model);
+            Console.WriteLine("Behaviour model loaded: fortify");
+        }
     }
 
     public float PredictHumanReinforce(float armies, float isBorder, float enemyThreat, float continentProgress, float continentBonus)
@@ -157,5 +166,24 @@ public class MlModels
         return Math.Clamp(pred.Score, 0f, 1f);
     }
 
-    public bool BehaviourModelsLoaded => _reinforceEngine is not null || _attackEngine is not null;
+    public float PredictHumanFortify(float armiesMoved, float targetIsBorder, float targetEnemyThreat, float skipped)
+    {
+        if (_fortifyEngine is null) return 0.5f;
+        var pred = _fortifyEngine.Predict(new FortifyInput
+        {
+            ArmiesMoved = armiesMoved, TargetIsBorder = targetIsBorder,
+            TargetEnemyThreat = targetEnemyThreat, Skipped = skipped
+        });
+        return Math.Clamp(pred.Score, 0f, 1f);
+    }
+
+    public class FortifyInput
+    {
+        public float ArmiesMoved { get; set; }
+        public float TargetIsBorder { get; set; }
+        public float TargetEnemyThreat { get; set; }
+        public float Skipped { get; set; }
+    }
+
+    public bool BehaviourModelsLoaded => _reinforceEngine is not null || _attackEngine is not null || _fortifyEngine is not null;
 }

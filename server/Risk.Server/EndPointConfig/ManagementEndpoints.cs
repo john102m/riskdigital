@@ -88,6 +88,16 @@ public static class ManagementEndpoints
                     }
                     catch (Exception ex) { results.Add($"Attack training error: {ex.Message}"); }
 
+                    try
+                    {
+                        var fortifyCsv = Path.Combine(logsDir, "fortify-log.csv");
+                        if (File.Exists(fortifyCsv))
+                            results.Add(Risk.Server.Training.BehaviourTrainer.TrainFortify(fortifyCsv, Path.Combine(modelsDir, "fortify-behaviour.zip")));
+                        else
+                            results.Add("No fortify log found");
+                    }
+                    catch (Exception ex) { results.Add($"Fortify training error: {ex.Message}"); }
+
                     try { ml.LoadBehaviourModels(modelsDir); }
                     catch (Exception ex) { results.Add($"Model load error: {ex.Message}"); }
                 }

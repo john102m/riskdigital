@@ -50,6 +50,25 @@ public static class BehaviourTrainer
         return $"Attack model trained ({count} rows) → {modelPath}";
     }
 
+    public static string TrainFortify(string csvPath, string modelPath)
+    {
+        var mlContext = new MLContext(seed: 42);
+
+        var data = mlContext.Data.LoadFromTextFile<FortifyRow>(csvPath, separatorChar: ',', hasHeader: true);
+        var count = mlContext.Data.CreateEnumerable<FortifyRow>(data, reuseRowObject: false).Count();
+
+        if (count < 10) return $"Not enough data ({count} rows, need 10+)";
+
+        var pipeline = mlContext.Transforms.CopyColumns("Label", nameof(FortifyRow.TargetIsBorder))
+            .Append(mlContext.Transforms.Concatenate("Features",
+                nameof(FortifyRow.ArmiesMoved), nameof(FortifyRow.TargetEnemyThreat), nameof(FortifyRow.Skipped)))
+            .Append(mlContext.Regression.Trainers.FastTree(numberOfTrees: 50, numberOfLeaves: 10, minimumExampleCountPerLeaf: 2));
+
+        var model = pipeline.Fit(data);
+        mlContext.Model.Save(model, data.Schema, modelPath);
+        return $"Fortify model trained ({count} rows) → {modelPath}";
+    }
+
     // Row schemas for CSV loading
     public class ReinforceRow
     {
@@ -71,5 +90,13 @@ public static class BehaviourTrainer
         [Microsoft.ML.Data.LoadColumn(8)] public float WouldCompleteCont { get; set; }
         [Microsoft.ML.Data.LoadColumn(9)] public float TurnNumber { get; set; }
         [Microsoft.ML.Data.LoadColumn(10)] public float DidAttack { get; set; }
+    }
+
+    public class FortifyRow
+    {
+        [Microsoft.ML.Data.LoadColumn(4)] public float ArmiesMoved { get; set; }
+        [Microsoft.ML.Data.LoadColumn(5)] public float TargetIsBorder { get; set; }
+        [Microsoft.ML.Data.LoadColumn(6)] public float TargetEnemyThreat { get; set; }
+        [Microsoft.ML.Data.LoadColumn(7)] public float Skipped { get; set; }
     }
 }
