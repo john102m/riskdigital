@@ -8,11 +8,13 @@ public class GameHub : Hub
 {
     private readonly GameService _game;
     private readonly AiService _ai;
+    private readonly ActionLogger _log;
 
-    public GameHub(GameService game, AiService ai)
+    public GameHub(GameService game, AiService ai, ActionLogger log)
     {
         _game = game;
         _ai = ai;
+        _log = log;
     }
 
     public async Task GetLobbyStatus()
@@ -35,9 +37,9 @@ public class GameHub : Hub
         await BroadcastLobbyStatus();
     }
 
-    public async Task AddAI(int tier = 2)
+    public async Task AddAI(int tier = 2, string? personality = null)
     {
-        var state = _game.AddAiPlayer(Context.ConnectionId, tier);
+        var state = _game.AddAiPlayer(Context.ConnectionId, tier, personality);
         await BroadcastState(state);
         await BroadcastLobbyStatus();
     }
@@ -73,6 +75,7 @@ public class GameHub : Hub
     public async Task Reinforce(int territoryId, int count = 1)
     {
         var (state, placed) = _game.Reinforce(Context.ConnectionId, territoryId, count);
+        _log.LogReinforce(state, state.CurrentPlayerIndex, territoryId);
         await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, placed);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
@@ -106,6 +109,7 @@ public class GameHub : Hub
 
     public async Task Attack(int sourceId, int targetId, int diceCount)
     {
+        _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, false);
         var (state, result) = _game.Attack(Context.ConnectionId, sourceId, targetId, diceCount);
         await Clients.All.SendAsync("CombatResult", result);
         await BroadcastState(state);
@@ -113,6 +117,7 @@ public class GameHub : Hub
 
     public async Task Blitz(int sourceId, int targetId)
     {
+        _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, true);
         var (state, result) = _game.Blitz(Context.ConnectionId, sourceId, targetId);
         await Clients.All.SendAsync("BlitzResult", result);
         await BroadcastState(state);
@@ -133,6 +138,8 @@ public class GameHub : Hub
 
     public async Task EndTurn()
     {
+        if (_game.State?.TurnPhase == TurnPhase.Fortify)
+            _log.LogFortifySkip(_game.State, _game.State.CurrentPlayerIndex);
         var state = _game.EndTurn(Context.ConnectionId);
         await Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await BroadcastState(state);
@@ -142,6 +149,7 @@ public class GameHub : Hub
     public async Task Fortify(int sourceId, int targetId, int armies)
     {
         var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        _log.LogFortify(state, state.CurrentPlayerIndex, sourceId, targetId, armies);
         await Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
         {

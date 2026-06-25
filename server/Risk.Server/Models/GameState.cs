@@ -71,8 +71,32 @@ public class Player
     public bool IsEliminated { get; set; }
     public bool IsAI { get; set; }
     public int AiTier { get; set; } = 1;
+    public AiPersonality? Personality { get; set; }
     [JsonIgnore]
     public Mission? Mission { get; set; }
+}
+
+public enum AiPersonality { Opportunist, Cautious, Aggressive, Continental }
+
+public record PersonalityWeights(
+    float AttackRatioThreshold,
+    float ContinentPriority,
+    float EliminationHunting,
+    float ContinentDenial,
+    float ArmyPreservation,
+    float ExpansionSpeed,
+    float CardHoarding,
+    float TimingMultiplier
+)
+{
+    public static PersonalityWeights For(AiPersonality p) => p switch
+    {
+        AiPersonality.Opportunist => new(2.0f, 0.1f, 1.0f, 0.3f, 0.4f, 0.7f, 0.5f, 0.9f),
+        AiPersonality.Cautious => new(4.0f, 0.3f, 0.1f, 0.5f, 1.0f, 0.2f, 1.0f, 1.3f),
+        AiPersonality.Aggressive => new(1.5f, 0.2f, 0.3f, 0.2f, 0.2f, 1.0f, 0.0f, 0.6f),
+        AiPersonality.Continental => new(2.5f, 1.0f, 0.0f, 0.8f, 0.5f, 0.5f, 0.3f, 1.0f),
+        _ => new(2.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.0f),
+    };
 }
 
 public class Territory

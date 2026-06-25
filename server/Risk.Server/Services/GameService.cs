@@ -88,7 +88,7 @@ public class GameService
     private static readonly int[] FemaleAvatars = [0, 1, 2, 3, 4, 5];
     private static readonly int[] MaleAvatars = [6, 7, 8];
 
-    public GameState AddAiPlayer(string connectionId, int tier = 2)
+    public GameState AddAiPlayer(string connectionId, int tier = 2, string? personality = null)
     {
         if (_state is null || _state.Phase != GamePhase.Lobby)
             throw new HubException("Not in lobby.");
@@ -113,6 +113,10 @@ public class GameService
         var avatar = genderPool.FirstOrDefault(a => !usedAvatars.Contains(a));
         if (usedAvatars.Contains(avatar)) avatar = Enumerable.Range(0, 9).First(a => !usedAvatars.Contains(a));
 
+        AiPersonality? parsedPersonality = tier >= 5 && Enum.TryParse<AiPersonality>(personality, true, out var p) ? p 
+            : (tier >= 5 ? (AiPersonality)Random.Shared.Next(4) 
+            : (tier >= 4 ? AiPersonality.Opportunist : null));
+
         _state.Players.Add(new Player
         {
             ConnectionId = $"ai-{Guid.NewGuid():N}",
@@ -120,7 +124,8 @@ public class GameService
             Colour = colour,
             AvatarIndex = avatar,
             IsAI = true,
-            AiTier = Math.Clamp(tier, 1, 3)
+            AiTier = Math.Clamp(tier, 1, 5),
+            Personality = parsedPersonality
         });
 
         return _state;
@@ -277,7 +282,7 @@ public class GameService
             var colourName = _state.Players[i].Colour switch
             {
                 "#E53E3E" => "Red", "#3182CE" => "Blue", "#38A169" => "Green",
-                "#D69E2E" => "Yellow", "#805AD5" => "Purple", "#DD6B20" => "Orange",
+                "#D69E2E" => "Gold", "#805AD5" => "Purple", "#DD6B20" => "Orange",
                 _ => $"Player {i + 1}"
             };
             missions.Add(new Mission { Type = MissionType.Elimination, Description = $"Eliminate {colourName}", TargetPlayerIndex = i });

@@ -616,9 +616,158 @@
 ### Status
 
 - Ready for live playtesting with real players
-- Only using Tier 3 AI going forward
-- Tier 4 (personality-based + advanced capabilities) is next major AI milestone
+- Tier 4 AI (Opportunist Ollie) implemented and available in lobby
+- Tier 5 pipeline in place: logging → training → prediction (needs more game data)
 
 ---
 
 *Updated: 2026-06-24 21:04*
+
+---
+
+## 2026-06-24 Late Evening — AI Tier 4 + Tier 5 Learning Pipeline
+
+### Completed
+
+- **AI Tier 4 (Opportunist Ollie)** — personality-based AI with enhanced Risk heuristics:
+  - `PersonalityWeights` record + `AiPersonality` enum (4 characters defined, Ollie active)
+  - Elimination hunting (targets weakest player for card steal)
+  - Continent denial (blocks opponents 1 territory from completing)
+  - Chokepoint recognition (values Ukraine, Siam, N. Africa etc.)
+  - Card escalation awareness (eliminations worth more as trade count rises)
+  - Personality timing multiplier (Ollie = 0.9× speed)
+  - Weighted reinforcement toward weakest player's borders
+  - Fortify toward elimination targets
+- **Lobby Tier-4 button** — amber `🦊 Tier-4`, two-row layout (Tier 1-2 / Tier 3-4)
+- **Action Logger** — `Services/ActionLogger.cs` logs every human player decision with board context:
+  - Reinforce: territory armies, border status, enemy threat, continent progress
+  - Attack: source/target armies, continent progress, blitz usage, elimination proximity
+  - Fortify: target border status, enemy threat, skip detection
+  - Only logs non-AI players. Appends to CSVs in `Data/logs/`
+- **Behaviour Trainer** — `Training/BehaviourTrainer.cs`:
+  - Trains reinforce model (predict placement likelihood from territory features)
+  - Trains attack model (predict attack likelihood from source/target features)
+  - FastTree regression, 50 trees, min 10 rows to train
+- **`/admin/train-behaviour` endpoint** — reads CSVs, trains models, hot-loads into memory (no restart)
+- **MlModels extended** — `PredictHumanReinforce()` and `PredictHumanAttack()` with graceful fallback
+- **Pipeline verified end-to-end** — played one game, logs collected, trained successfully
+- **TV info panel** — removed player names from activity feed (name already in heading)
+- **AI-TIER5-PLAN.md** — comprehensive tutorial: data science basics → ML.NET → Risk implementation
+
+### Files Changed
+
+- `server/Risk.Server/Models/GameState.cs` — AiPersonality enum, PersonalityWeights record
+- `server/Risk.Server/Services/GameService.cs` — tier clamp 1–4, personality assignment
+- `server/Risk.Server/Services/AiService.cs` — Tier 4 branches + heuristic helpers
+- `server/Risk.Server/Services/ActionLogger.cs` — new
+- `server/Risk.Server/Services/MlModels.cs` — behaviour model loading + predictions
+- `server/Risk.Server/Training/BehaviourTrainer.cs` — new
+- `server/Risk.Server/Hubs/GameHub.cs` — ActionLogger injection + logging calls
+- `server/Risk.Server/Program.cs` — DI, /admin/train-behaviour, startup load
+- `server/Risk.Server/wwwroot/tv.html` — activity feed name removal
+- `handset/src/components/LobbyScreen.tsx` — Tier-4 button, two-row layout
+- `docs/AI-TIER5-PLAN.md` — full ML tutorial + plan (replaced)
+- `docs/AI-TIER4-PLAN.md` — advanced capabilities added
+- `docs/PROPOSAL-AI-TIER4.md` — updated
+
+---
+
+*Updated: 2026-06-24 22:20*
+
+---
+
+## 2026-06-24 Night — Deployment to WHUK + Playtest
+
+### Completed
+
+- **Deployed to WHUK** — full stack live at `https://risk.spooch.co.uk`
+- **Fixed startup crash** — `ActionLogger` directory creation + `LoadBehaviourModels` now fail gracefully (try-catch, no crash if Data dirs missing)
+- **`/admin/train-behaviour` hardened** — full try-catch, friendly message when no logs exist
+- **TV map `object-fit: contain`** — reverted from `fill`/`cover` back to `contain` + `syncOverlay()`. 16:9 image fills TV perfectly, dots track correctly on desktop too.
+- **Won a game on WHUK** — full playtest successful (but action logging not writing — investigate tomorrow)
+- **Gold colour** — renamed "Yellow" to "Gold" in mission descriptions (matches actual hex appearance)
+
+### Known Issue (tomorrow)
+
+- Action logs not being created on WHUK despite game completing. Likely a path issue — `ContentRootPath` on WHUK might not be what we expect, or write permissions on `Data/logs/`. Need to add a debug endpoint to check paths.
+
+### Files Changed
+
+- `server/Risk.Server/Services/ActionLogger.cs` — try-catch on directory creation + file append
+- `server/Risk.Server/Services/MlModels.cs` — guard against missing models directory
+- `server/Risk.Server/Program.cs` — train-behaviour endpoint hardened with full error surfacing
+- `server/Risk.Server/wwwroot/tv.html` — reverted to object-fit: contain
+- `server/Risk.Server/Services/GameService.cs` — "Yellow" → "Gold" in mission descriptions
+
+---
+
+*Updated: 2026-06-24 23:38*
+
+---
+
+## 2026-06-25 Morning — Logging Fix, Endpoint Refactor, AI Personality Restructure
+
+### Completed
+
+- **Action logger fix (WHUK)** — logs weren't writing due to access denied on `Data/logs/`. Added fallback: tries app-local first, falls back to `%TEMP%\risk-logs`. Verified working on WHUK (`C:\Windows\TEMP\risk-logs`).
+- **ILogger added to ActionLogger** — surfaces first write failure instead of silently swallowing all exceptions.
+- **`/admin/logs-status` endpoint** — reports active log directory, existence, writability, error, and file list with sizes.
+- **`/admin/logs-download` endpoint** — zips all CSVs and returns `risk-logs.zip` for backup.
+- **`/admin/logs-upload` endpoint** — POST a zip of CSVs to restore training data after deploy/restart. Appends to existing files (skips duplicate headers).
+- **EndPointConfig refactor** — all `app.MapGet`/`app.MapPost` endpoints moved to `EndPointConfig/ManagementEndpoints.cs` as extension method. `Program.cs` slimmed down.
+- **AI personality moved from Tier 4 to Tier 5** — Tier 4 is now single personality (Opportunist) with enhanced heuristics. Tier 5 has 4 personalities (Opportunist, Cautious, Aggressive, Continental) that use the ML learning pipeline.
+- **Tier 5 personality picker in lobby** — tap 🧬 Tier-5 to expand: 🦊 Opportunist, 🛡️ Cautious, 🔥 Aggressive, 🗺️ Continental, 🎲 Mystery (random).
+- **Mystery personality** — server picks random personality, player won't know which until they observe behaviour.
+- **Docs updated** — PLAYER-GUIDE.md, AI-PLAYER.md, guide.html all updated with corrected tier structure.
+
+### Files Changed
+
+- `server/Risk.Server/Program.cs` — slimmed, calls `MapManagementEndpoints()`
+- `server/Risk.Server/EndPointConfig/ManagementEndpoints.cs` — new (all admin/board/guide endpoints)
+- `server/Risk.Server/Services/ActionLogger.cs` — ILogger, LogDir property, temp fallback
+- `server/Risk.Server/Services/GameService.cs` — personality param, random for mystery, tier 5 assignment
+- `server/Risk.Server/Hubs/GameHub.cs` — AddAI accepts personality param
+- `server/Risk.Server/wwwroot/guide.html` — AI table updated
+- `handset/src/components/LobbyScreen.tsx` — Tier-5 personality picker + mystery button
+- `docs/PLAYER-GUIDE.md` — AI bots section updated
+- `docs/AI-PLAYER.md` — quick reference table updated
+
+---
+
+*Updated: 2026-06-25 08:51*
+
+---
+
+## 2026-06-25 Evening — Stable Storage, Unified Training, App Logging
+
+### Completed
+
+- **Stable writable path found** — `D:\Inetpub\vhosts\spooch.co.uk\tmp\risk-logs` (and `risk-models`). Per-site, survives deploys and app pool recycling.
+- **ActionLogger path cascade** — tries `Data/logs` → `../tmp/risk-logs` → `%TEMP%/risk-logs`. WHUK lands on vhost tmp.
+- **Unified `/admin/train` endpoint** — single endpoint trains all models (blitz from 58K simulated battles + behaviour from player logs). Replaced separate `/admin/train-behaviour`.
+- **`/admin/ml-status` endpoint** — reports loaded models + sample predictions for verification.
+- **`/admin/app-log` endpoint** — in-memory ring buffer (300 lines), captures all ILogger output. No file I/O, no permissions needed.
+- **`RingBufferLogger.cs`** — ILoggerProvider implementation, registered in DI, passively captures all app logging.
+- **`/admin/logs-download` endpoint** — zips CSVs for backup.
+- **`/admin/logs-upload` endpoint** — POST zip to restore (blocked by WHUK IIS — use FTP instead).
+- **Blitz model now trains on WHUK** — writes to `tmp/risk-models/blitz-model.zip`, loaded on startup.
+- **Program.cs ML loading** — checks temp models dir first, falls back to `Data/models`.
+- **All models verified on WHUK** — blitz (58K rows), reinforce (115 rows), attack (232 rows).
+- **Route group consistency** — all admin endpoints on `MapGroup("/admin")`, no mixed `app.MapGet("/admin/...")`.
+
+### Files Changed
+
+- `server/Risk.Server/Program.cs` — RingBufferLogger registration, ML load from temp path
+- `server/Risk.Server/EndPointConfig/ManagementEndpoints.cs` — unified train, ml-status, app-log, logs-status with alt-path testing, route group cleanup
+- `server/Risk.Server/Services/ActionLogger.cs` — path cascade (Data → tmp → TEMP)
+- `server/Risk.Server/Services/RingBufferLogger.cs` — new (in-memory log provider)
+- `docs/FILE-MAP.md` — endpoints table updated
+- `docs/PROGRESS.md` — this entry
+
+### Next
+
+- Automate occasional retraining (after N games? timer? on game-over?)
+
+---
+
+*Updated: 2026-06-25 20:43*
