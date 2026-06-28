@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
 import { Card, GameState, CombatResult, BlitzResult } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
+import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { CardTradePanel } from "./CardTradePanel";
+import { CardBadge } from "./CardBadge";
 
 interface Props {
   connection: HubConnection;
@@ -154,9 +156,14 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
 
   if (!isMyTurn) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
-        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
-        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Attacking</span>
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center pt-2 px-4 pb-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <div className="flex items-center justify-center gap-2 min-h-[33px]">
+          <CardBadge cards={cards} territories={gameState.territories} />
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+          <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Attacking</span>
+        </div>
       </div>
     );
   }
@@ -171,7 +178,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     const effectiveMove = Math.max(minMove, Math.min(moveArmies, maxMove));
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-green-400">{gameState.territories.find(t => t.id === pendingTarget)?.name} Captured!</p>
+        <p className="text-lg font-bold text-green-400">{shortName(gameState.territories.find(t => t.id === pendingTarget)?.name ?? "")} Captured!</p>
         <p className="text-sm text-gray-400">Move troops in</p>
         {blitzSummary && (
           <p className="text-xs text-gray-400">⚡ {blitzSummary.rounds} rounds · You lost {blitzSummary.atkLoss} · They lost {blitzSummary.defLoss}</p>
@@ -192,10 +199,11 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
 
   return (
     <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
-      <div className="flex items-center justify-center mb-2 min-h-[33px] mx-10">
+      <div className="flex items-center justify-center gap-2 mb-2 min-h-[33px]">
         <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: me.colour }}>
           Attack
         </span>
+        <CardBadge cards={cards} territories={gameState.territories} />
       </div>
 
       {/* Last result */}
@@ -229,7 +237,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
                   onClick={() => { setSourceId(t.id); setTargetId(null); }}
                   className="px-3 py-2 rounded text-sm bg-gray-700"
                 >
-                  {t.name} ({t.armies})
+                  {shortName(t.name)} ({t.armies})
                 </button>
               )}
             />
@@ -238,7 +246,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       ) : (
         <div className="flex items-center gap-2 mb-3">
           <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-green-700 flex items-center gap-1">
-            🟢 {selectedSource?.name} ({selectedSource?.armies})
+            🟢 {selectedSource ? shortName(selectedSource.name) : ""} ({selectedSource?.armies})
             <button onClick={() => { setSourceId(null); setTargetId(null); }} className="ml-1 text-white/60 hover:text-white">✕</button>
           </span>
         </div>
@@ -255,7 +263,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
                 onClick={() => setTargetId(t.id)}
                 className={`px-3 py-2 rounded text-sm ${targetId === t.id ? "bg-red-600" : "bg-gray-700"}`}
               >
-                {t.name} ({t.armies})
+                {shortName(t.name)} ({t.armies})
               </button>
             ))}
           </div>
@@ -264,22 +272,22 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
 
       {/* Attack buttons */}
       {sourceId !== null && targetId !== null && (
-        <div className="mb-3 flex gap-2">
-          <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
-            ⚔️ {effectiveDice}🎲
-          </button>
-          <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-2 rounded-lg font-bold disabled:opacity-30">
-            ⚡ Blitz
-          </button>
-          {maxDice > 1 && (
-            <div className="flex gap-1">
-              {[1, 2, 3].filter(d => d <= maxDice && d !== effectiveDice).map((d) => (
-                <button key={d} onClick={() => setDiceCount(d)} className="px-2 py-2 rounded bg-gray-700 text-xs font-bold">
-                  {d}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="mb-3 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
+              ⚔️ {effectiveDice}🎲
+            </button>
+            <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
+              ⚡ Blitz
+            </button>
+          </div>
+          <div className="flex gap-2">
+            {[3, 2, 1].map((d) => (
+              <button key={d} onClick={() => setDiceCount(d)} disabled={d > maxDice} className={`flex-1 py-2 rounded-lg font-bold text-sm disabled:opacity-30 ${d === effectiveDice ? "bg-amber-600" : "bg-gray-700"}`}>
+                {d}🎲
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

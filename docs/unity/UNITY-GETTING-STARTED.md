@@ -11,7 +11,9 @@ Three progressive exercises: editor basics → physics (no code) → a C# script
 1. Download **Unity Hub** from [unity.com/download](https://unity.com/download)
 2. Sign in (free Personal license)
 3. Hub → Installs → Install Editor → latest **LTS** (Unity 6 / 6000.x)
-4. Modules: tick **Visual Studio** or **VS Code Editor**
+4. Modules: tick **Visual Studio Editor** (integration package — VS2026 Enterprise already installed with "Game Development with Unity" workload)
+
+> **Our setup:** VS2026 Enterprise with the Unity workload is already installed on the Z440. Unity will auto-detect it as the external script editor. Verify in Unity: Edit → Preferences → External Tools → External Script Editor = "Microsoft Visual Studio 2026".
 
 ### Create a Project
 

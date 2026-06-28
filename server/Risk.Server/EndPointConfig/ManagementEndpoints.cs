@@ -165,6 +165,7 @@ public static class ManagementEndpoints
             {
                 blitzModel = ml.IsLoaded,
                 behaviourModels = ml.BehaviourModelsLoaded,
+                
                 sampleBlitz = $"8v3 = {ml.PredictBlitz(8, 3):F2}, 4v6 = {ml.PredictBlitz(4, 6):F2}",
                 sampleReinforce = $"border+threat = {ml.PredictHumanReinforce(3, 1, 12, 0.75f, 5):F2}, interior = {ml.PredictHumanReinforce(1, 0, 0, 0.25f, 2):F2}",
                 sampleAttack = $"8v3 = {ml.PredictHumanAttack(8, 3, 10, 0, 0):F2}, 3v8 = {ml.PredictHumanAttack(3, 8, 10, 0, 0):F2}"

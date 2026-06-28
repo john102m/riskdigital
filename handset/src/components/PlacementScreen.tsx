@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HubConnection } from "@microsoft/signalr";
 import { GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
+import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { heavyTap } from "../utils/vibrate";
 
@@ -56,7 +57,7 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
                 onClick={() => { if (me.reinforcementsRemaining > 0) { heavyTap(); placeArmy(t.id, 1); } }}
                 style={{ backgroundColor: me.colour + "33" }}
                 className={`font-medium min-w-0 flex-1 px-2 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation cursor-pointer ${me.reinforcementsRemaining <= 0 ? "opacity-50 pointer-events-none" : ""}`}
-              ><span className="truncate">{t.name}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
+              ><span className="truncate">{shortName(t.name)}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
               <button
                 onClick={() => { heavyTap(); placeArmy(t.id, me.reinforcementsRemaining); }}
                 onContextMenu={(e) => e.preventDefault()}
