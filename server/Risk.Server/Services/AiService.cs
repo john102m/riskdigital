@@ -756,6 +756,21 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             int enemyThreat = t.Adjacent.Where(a => state.Territories[a].OwnerId != myIndex).Sum(a => state.Territories[a].Armies);
             score += Math.Max(0, enemyThreat - t.Armies) * w.ArmyPreservation;
 
+            // Mission pursuit
+            var mission = state.Players[myIndex].Mission;
+            if (mission is not null)
+            {
+                if (mission.Type == MissionType.ContinentConquest && mission.RequiredContinents is not null
+                    && mission.RequiredContinents.Contains(t.Continent))
+                    score += 5f;
+                else if (mission.Type == MissionType.Elimination
+                    && t.Adjacent.Any(a => state.Territories[a].OwnerId == mission.TargetPlayerIndex))
+                    score += 8f;
+                else if (mission.Type == MissionType.TerritoryCount && mission.MinArmiesPerTerritory >= 2
+                    && t.Armies < 2)
+                    score += 3f;
+            }
+
             if (score > bestScore) { bestScore = score; best = t; }
         }
 
@@ -802,6 +817,19 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         // Chokepoint value
         if (IsChokepoint(target))
             score += 0.3f;
+
+        // Mission pursuit
+        var mission = state.Players[myIndex].Mission;
+        if (mission is not null)
+        {
+            if (mission.Type == MissionType.ContinentConquest && mission.RequiredContinents is not null
+                && mission.RequiredContinents.Contains(target.Continent))
+                score += 0.4f;
+            else if (mission.Type == MissionType.Elimination && target.OwnerId == mission.TargetPlayerIndex)
+                score += 0.5f;
+            else if (mission.Type == MissionType.TerritoryCount)
+                score += 0.1f;
+        }
 
         // Tier 5: blend learned human behaviour
         if (tier >= 5)
@@ -945,7 +973,22 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         }
 
         // Combined score: ML probability + strategic value (normalised)
-        return mlScore + (continentBonus / 20f);
+        float score = mlScore + (continentBonus / 20f);
+
+        // Mission pursuit
+        var mission = state.Players[playerIndex].Mission;
+        if (mission is not null)
+        {
+            if (mission.Type == MissionType.ContinentConquest && mission.RequiredContinents is not null
+                && mission.RequiredContinents.Contains(target.Continent))
+                score += 0.3f;
+            else if (mission.Type == MissionType.Elimination && target.OwnerId == mission.TargetPlayerIndex)
+                score += 0.4f;
+            else if (mission.Type == MissionType.TerritoryCount)
+                score += 0.1f;
+        }
+
+        return score;
     }
 
     /// <summary>

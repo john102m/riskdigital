@@ -9,12 +9,16 @@ public class GameHub : Hub
     private readonly GameService _game;
     private readonly AiService _ai;
     private readonly ActionLogger _log;
+    private readonly MlModels _ml;
+    private readonly ILogger<GameHub> _logger;
 
-    public GameHub(GameService game, AiService ai, ActionLogger log)
+    public GameHub(GameService game, AiService ai, ActionLogger log, MlModels ml, ILogger<GameHub> logger)
     {
         _game = game;
         _ai = ai;
         _log = log;
+        _ml = ml;
+        _logger = logger;
     }
 
     public async Task GetLobbyStatus()
@@ -211,6 +215,34 @@ public class GameHub : Hub
     private async Task BroadcastState(object state)
     {
         await Clients.All.SendAsync("GameStateUpdated", state);
+        if (state is GameState gs && gs.Phase == GamePhase.GameOver)
+            _ = Task.Run(() => RetrainModels());
+    }
+
+    private void RetrainModels()
+    {
+        try
+        {
+            var logsDir = _log.LogDir;
+            var modelsDir = Path.Combine(Path.GetDirectoryName(logsDir)!, "risk-models");
+            Directory.CreateDirectory(modelsDir);
+
+            var reinforceCsv = Path.Combine(logsDir, "reinforce-log.csv");
+            if (File.Exists(reinforceCsv))
+                _logger.LogInformation("Retrain: {Result}", Training.BehaviourTrainer.TrainReinforce(reinforceCsv, Path.Combine(modelsDir, "reinforce-behaviour.zip")));
+
+            var attackCsv = Path.Combine(logsDir, "attack-log.csv");
+            if (File.Exists(attackCsv))
+                _logger.LogInformation("Retrain: {Result}", Training.BehaviourTrainer.TrainAttack(attackCsv, Path.Combine(modelsDir, "attack-behaviour.zip")));
+
+            var fortifyCsv = Path.Combine(logsDir, "fortify-log.csv");
+            if (File.Exists(fortifyCsv))
+                _logger.LogInformation("Retrain: {Result}", Training.BehaviourTrainer.TrainFortify(fortifyCsv, Path.Combine(modelsDir, "fortify-behaviour.zip")));
+
+            _ml.LoadBehaviourModels(modelsDir);
+            _logger.LogInformation("Retrain: models reloaded");
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Retrain failed"); }
     }
 
     private async Task BroadcastLobbyStatus()

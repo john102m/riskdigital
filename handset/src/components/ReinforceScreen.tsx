@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
 import { Card, GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
+import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
 import { CardTradePanel } from "./CardTradePanel";
-import { tap, heavyTap } from "../utils/vibrate";
+import { CardBadge } from "./CardBadge";
+import { heavyTap } from "../utils/vibrate";
 
 function hasTradeableSet(cards: Card[]): boolean {
   if (cards.length < 3) return false;
@@ -52,9 +54,14 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
 
   if (!isMyTurn) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
-        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
-        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Reinforcing</span>
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center pt-2 px-4 pb-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <div className="flex items-center justify-center gap-2 min-h-[33px]">
+          <CardBadge cards={cards} territories={gameState.territories} />
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+          <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Reinforcing</span>
+        </div>
       </div>
     );
   }
@@ -79,7 +86,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
         <p className="text-lg font-bold text-amber-400">Trade cards first ({cards.length} held)</p>
-        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => { }} />
+        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => setShowCards(false)} />
       </div>
     );
   }
@@ -121,7 +128,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
                 onClick={() => { if (me.reinforcementsRemaining > 0) { heavyTap(); reinforce(t.id, 1); } }}
                 style={{ backgroundColor: me.colour + "33" }}
                 className={`font-medium min-w-0 flex-1 px-2 py-2 rounded-l text-sm flex justify-between items-center border border-white/10 active:scale-95 active:brightness-150 transition-all touch-manipulation cursor-pointer ${me.reinforcementsRemaining <= 0 ? "opacity-50 pointer-events-none" : ""}`}
-              ><span className="truncate">{t.name}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
+              ><span className="truncate">{shortName(t.name)}</span><span className="font-bold ml-2 shrink-0 text-white/70">{t.armies}</span></span>
               <button
                 onClick={() => { heavyTap(); reinforce(t.id, me.reinforcementsRemaining); }}
                 disabled={me.reinforcementsRemaining <= 0 ? true : false}

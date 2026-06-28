@@ -71,7 +71,7 @@ export default function App() {
     }
 
     if (gameState.turnPhase === "Fortify") {
-      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><FortifyScreen connection={connection} gameState={gameState} playerName={playerName} /></>;
+      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><FortifyScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} /></>;
     }
 
     return (

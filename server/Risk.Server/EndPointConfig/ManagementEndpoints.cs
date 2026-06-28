@@ -88,6 +88,16 @@ public static class ManagementEndpoints
                     }
                     catch (Exception ex) { results.Add($"Attack training error: {ex.Message}"); }
 
+                    try
+                    {
+                        var fortifyCsv = Path.Combine(logsDir, "fortify-log.csv");
+                        if (File.Exists(fortifyCsv))
+                            results.Add(Risk.Server.Training.BehaviourTrainer.TrainFortify(fortifyCsv, Path.Combine(modelsDir, "fortify-behaviour.zip")));
+                        else
+                            results.Add("No fortify log found");
+                    }
+                    catch (Exception ex) { results.Add($"Fortify training error: {ex.Message}"); }
+
                     try { ml.LoadBehaviourModels(modelsDir); }
                     catch (Exception ex) { results.Add($"Model load error: {ex.Message}"); }
                 }
@@ -155,6 +165,7 @@ public static class ManagementEndpoints
             {
                 blitzModel = ml.IsLoaded,
                 behaviourModels = ml.BehaviourModelsLoaded,
+                
                 sampleBlitz = $"8v3 = {ml.PredictBlitz(8, 3):F2}, 4v6 = {ml.PredictBlitz(4, 6):F2}",
                 sampleReinforce = $"border+threat = {ml.PredictHumanReinforce(3, 1, 12, 0.75f, 5):F2}, interior = {ml.PredictHumanReinforce(1, 0, 0, 0.25f, 2):F2}",
                 sampleAttack = $"8v3 = {ml.PredictHumanAttack(8, 3, 10, 0, 0):F2}, 3v8 = {ml.PredictHumanAttack(3, 8, 10, 0, 0):F2}"

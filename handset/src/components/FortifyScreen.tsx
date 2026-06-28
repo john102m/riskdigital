@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { HubConnection } from "@microsoft/signalr";
-import { GameState } from "../types/game";
+import { Card, GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
+import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
+import { CardBadge } from "./CardBadge";
 
 interface Props {
   connection: HubConnection;
   gameState: GameState;
   playerName: string;
+  cards: Card[];
 }
 
-export function FortifyScreen({ connection, gameState, playerName }: Props) {
+export function FortifyScreen({ connection, gameState, playerName, cards }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -64,19 +67,25 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
 
   if (!isMyTurn) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
-        <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
-        <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Fortifying</span>
+      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center pt-2 px-4 pb-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
+        <div className="flex items-center justify-center gap-2 min-h-[33px]">
+          <CardBadge cards={cards} territories={gameState.territories} />
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+          <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Fortifying</span>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
-      <div className="flex items-center justify-center mb-2 min-h-[33px] mx-10">
+      <div className="flex items-center justify-center gap-2 mb-2 min-h-[33px]">
         <span className="px-3 py-1 rounded-full text-sm font-bold uppercase" style={{ backgroundColor: me.colour }}>
           Fortify
         </span>
+        <CardBadge cards={cards} territories={gameState.territories} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -95,7 +104,7 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
                     onClick={() => { setSourceId(t.id); setTargetId(null); setArmies(1); }}
                     className="px-3 py-2 rounded text-sm bg-gray-700"
                   >
-                    {t.name} ({t.armies})
+                    {shortName(t.name)} ({t.armies})
                   </button>
                 )}
               />
@@ -104,7 +113,7 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
         ) : (
           <div className="flex items-center gap-2 mb-3">
             <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-green-700 flex items-center gap-1">
-              🟢 {selectedSource?.name} ({selectedSource?.armies})
+              🟢 {selectedSource ? shortName(selectedSource.name) : ""} ({selectedSource?.armies})
               <button onClick={() => { setSourceId(null); setTargetId(null); setArmies(1); }} className="ml-1 text-white/60 hover:text-white">✕</button>
             </span>
           </div>
@@ -121,7 +130,7 @@ export function FortifyScreen({ connection, gameState, playerName }: Props) {
                   onClick={() => { setTargetId(t.id); setArmies(1); }}
                   className={`px-3 py-2 rounded text-sm ${targetId === t.id ? "bg-blue-600" : "bg-gray-700"}`}
                 >
-                  {t.name} ({t.armies})
+                  {shortName(t.name)} ({t.armies})
                 </button>
               ))}
             </div>

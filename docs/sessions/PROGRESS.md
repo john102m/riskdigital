@@ -766,8 +766,49 @@
 
 ### Next
 
-- Automate occasional retraining (after N games? timer? on game-over?)
+- Unity TV board! 🎮
 
 ---
 
-*Updated: 2026-06-25 20:43*
+*Updated: 2026-06-25 20:59*
+
+---
+
+## 2026-06-25 Late — Auto-Retrain on Game Over
+
+### Completed
+
+- **Background retrain on game-over** — fire-and-forget `Task.Run()` triggers after every completed game. No player-facing delay.
+- **Fortify behaviour trainer** — `TrainFortify` in BehaviourTrainer, `FortifyInput` + `PredictHumanFortify` in MlModels.
+- **All 3 behaviour models now auto-retrain** — reinforce, attack, fortify.
+- **ILogger in GameHub** — retrain results visible in `/admin/app-log` ring buffer.
+- **`/admin/train` endpoint** — also trains fortify model now.
+
+### Files Changed
+
+- `server/Risk.Server/Hubs/GameHub.cs` — MlModels + ILogger injection, RetrainModels with logging
+- `server/Risk.Server/EndPointConfig/ManagementEndpoints.cs` — fortify in /admin/train
+- `server/Risk.Server/Training/BehaviourTrainer.cs` — TrainFortify + FortifyRow
+- `server/Risk.Server/Services/MlModels.cs` — FortifyInput, PredictHumanFortify, LoadBehaviourModels loads fortify
+
+---
+
+## One Week Summary (2026-06-20 → 2026-06-25)
+
+From zero to a fully playable, deployed digital board game:
+
+- ✅ Full game loop: lobby → placement → reinforce → attack → fortify → game over
+- ✅ Card system with escalation, forced trades, territory bonuses
+- ✅ 14 mission cards with elimination fallback
+- ✅ Blitz attack with ML-predicted odds
+- ✅ 5-tier AI system (random → heuristic → strategic → personality → learning)
+- ✅ 4 AI personalities (Opportunist, Cautious, Aggressive, Continental)
+- ✅ ML.NET training pipeline: blitz probability + 3 behaviour models from human play
+- ✅ Auto-retrain on game-over (background, fire-and-forget)
+- ✅ Web TV board with map, dots, glow, sounds, activity feed, phase popups
+- ✅ Handset with continent accordions, haptics, card UI, mission badges
+- ✅ Live deployment on WHUK (risk.spooch.co.uk)
+- ✅ Ring buffer logging, admin diagnostics, training data backup/restore
+- ✅ 22+ docs covering design, AI, ML, setup, progress
+
+*Updated: 2026-06-25 20:59*
