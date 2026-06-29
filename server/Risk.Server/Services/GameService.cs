@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Risk.Server.Hubs;
 using Risk.Server.Models;
 using System.Text.Json;
 
@@ -14,6 +15,13 @@ public class GameService
     private readonly TerritoryData _territoryData;
     private GameState? _state;
 
+    // Unity TV connection tracking
+    private string? _unityTVConnectionId;
+    public bool IsUnityTVConnected => _unityTVConnectionId != null;
+
+    // Pending dice result from Unity TV
+    private TaskCompletionSource<(int[] AttackerDice, int[] DefenderDice)>? _pendingDiceResult;
+
     public GameState? State => _state;
     public TerritoryData MapData => _territoryData;
 
@@ -21,6 +29,25 @@ public class GameService
     {
         var json = File.ReadAllText("Data/territories.json");
         _territoryData = JsonSerializer.Deserialize<TerritoryData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    }
+
+    public void RegisterAsTV(string connectionId) => _unityTVConnectionId = connectionId;
+
+    public void UnregisterTV(string connectionId)
+    {
+        if (_unityTVConnectionId == connectionId)
+            _unityTVConnectionId = null;
+    }
+
+    public TaskCompletionSource<(int[] AttackerDice, int[] DefenderDice)> CreateDiceRequest()
+    {
+        _pendingDiceResult = new TaskCompletionSource<(int[], int[])>();
+        return _pendingDiceResult;
+    }
+
+    public void SubmitDiceResult(int[] attackerDice, int[] defenderDice)
+    {
+        _pendingDiceResult?.TrySetResult((attackerDice, defenderDice));
     }
 
     public object GetLobbyStatus()
@@ -598,6 +625,92 @@ public class GameService
         return (_state, result);
     }
 
+    /// <summary>
+    /// Attack with Unity dice delegation when connected, server-side fallback otherwise.
+    /// Used by both GameHub and AiService.
+    /// </summary>
+    public async Task<(GameState State, CombatResult Result)> AttackWithDice(
+        IHubContext<GameHub> hub, string connectionId, int sourceId, int targetId, int diceCount)
+    {
+        if (!IsUnityTVConnected)
+            return Attack(connectionId, sourceId, targetId, diceCount);
+
+        var source = _state!.Territories.First(t => t.Id == sourceId);
+        var target = _state.Territories.First(t => t.Id == targetId);
+        int defenderDiceCount = target.Armies >= 2 ? 2 : 1;
+
+        var tcs = CreateDiceRequest();
+        await hub.Clients.All.SendAsync("CombatRollRequest", new CombatRollRequest(sourceId, targetId, diceCount, defenderDiceCount));
+
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(10000));
+        if (completed == tcs.Task)
+        {
+            var (attackerDice, defenderDice) = await tcs.Task;
+            return ResolveCombat(connectionId, sourceId, targetId, attackerDice, defenderDice);
+        }
+
+        // Timeout — fall back to server-side roll
+        return Attack(connectionId, sourceId, targetId, diceCount);
+    }
+
+    /// <summary>Resolve combat using externally-provided dice values (from Unity TV physics).</summary>
+    public (GameState State, CombatResult Result) ResolveCombat(string connectionId, int sourceId, int targetId, int[] attackerDice, int[] defenderDice)
+    {
+        if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
+            throw new HubException("Not in attack phase.");
+
+        var player = _state.Players[_state.CurrentPlayerIndex];
+        if (player.ConnectionId != connectionId)
+            throw new HubException("Not your turn.");
+
+        var source = _state.Territories.First(t => t.Id == sourceId);
+        var target = _state.Territories.First(t => t.Id == targetId);
+
+        // Sort dice descending (same as server-rolled path)
+        attackerDice = attackerDice.OrderByDescending(d => d).ToArray();
+        defenderDice = defenderDice.OrderByDescending(d => d).ToArray();
+
+        // Compare pairs — defender wins ties
+        int attackerLosses = 0, defenderLosses = 0;
+        int comparisons = Math.Min(attackerDice.Length, defenderDice.Length);
+        for (int i = 0; i < comparisons; i++)
+        {
+            if (attackerDice[i] > defenderDice[i])
+                defenderLosses++;
+            else
+                attackerLosses++;
+        }
+
+        source.Armies -= attackerLosses;
+        target.Armies -= defenderLosses;
+
+        bool captured = target.Armies <= 0;
+
+        if (_state.HouseRules.LockedAttackFront && _state.AttackFrontIds.Count == 0)
+            _state.AttackFrontIds.Add(sourceId);
+
+        if (captured)
+        {
+            target.OwnerId = _state.CurrentPlayerIndex;
+            target.Armies = 0;
+            _state.PendingMoveSource = sourceId;
+            _state.PendingMoveTarget = targetId;
+            if (_state.HouseRules.LockedAttackFront)
+                _state.AttackFrontIds.Add(targetId);
+            if (!player.EarnedCardThisTurn)
+                player.EarnedCardThisTurn = true;
+        }
+
+        var result = new CombatResult(
+            attackerDice, defenderDice,
+            attackerLosses, defenderLosses,
+            captured, sourceId, targetId,
+            source.Armies, target.Armies
+        );
+
+        return (_state, result);
+    }
+
     public (GameState State, BlitzResult Result) Blitz(string connectionId, int sourceId, int targetId)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
@@ -628,6 +741,8 @@ public class GameService
         int startSourceArmies = source.Armies;
         int startTargetArmies = target.Armies;
         int rounds = 0;
+        int[] finalAttackerDice = [];
+        int[] finalDefenderDice = [];
 
         int lastDice = 0;
         while (source.Armies > 1 && target.Armies > 0)
@@ -636,6 +751,9 @@ public class GameService
             var attackerDice = RollDice(lastDice).OrderByDescending(d => d).ToArray();
             int defDice = target.Armies >= 2 ? 2 : 1;
             var defenderDice = RollDice(defDice).OrderByDescending(d => d).ToArray();
+
+            finalAttackerDice = attackerDice;
+            finalDefenderDice = defenderDice;
 
             int comparisons = Math.Min(attackerDice.Length, defenderDice.Length);
             for (int i = 0; i < comparisons; i++)
@@ -669,7 +787,8 @@ public class GameService
             startSourceArmies - source.Armies,
             startTargetArmies - target.Armies,
             captured, sourceId, targetId,
-            source.Armies, target.Armies
+            source.Armies, target.Armies,
+            finalAttackerDice, finalDefenderDice
         );
 
         return (_state, result);

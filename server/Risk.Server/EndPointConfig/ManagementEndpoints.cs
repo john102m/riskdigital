@@ -25,6 +25,12 @@ public static class ManagementEndpoints
             return Results.Ok(game.DebugMode ? "Reset (debug mode — reduced armies)" : "Reset");
         });
 
+        admin.MapGet("/testdice", async (IHubContext<GameHub> hub, int? a, int? d) =>
+        {
+            await hub.Clients.All.SendAsync("CombatRollRequest", new Risk.Server.Models.CombatRollRequest(0, 1, a ?? 3, d ?? 2));
+            return Results.Ok($"Sent {a ?? 3}a {d ?? 2}d");
+        });
+
         admin.MapGet("/gameover", (GameService game, IHubContext<GameHub> hub) =>
         {
             if (game.State is null) return Results.BadRequest("No game");

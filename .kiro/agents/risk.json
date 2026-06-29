@@ -4,7 +4,9 @@
   "prompt": "You are helping build Risk Digital, a digital adaptation of the classic Risk board game. Architecture: .NET 8 SignalR server (server/), React/Vite/Tailwind handset app (handset/), Unity 2D for TV display (tv/). All communicate via SignalR. The developer is experienced with C#/.NET and React but learning Unity. Keep code minimal and clean. Match existing patterns in each sub-project.",
   "resources": [
     "file://README.md",
-    "file://docs/RISK-DESIGN.md",
-    "file://docs/UNITY-GETTING-STARTED.md"
+    "file://docs/design/RISK-DESIGN.md",
+    "file://docs/unity/UNITY-TV-VISION.md",
+    "file://docs/unity/UNITY-PROGRESS.md",
+    "file://docs/unity/UNITY-GETTING-STARTED.md"
   ]
 }

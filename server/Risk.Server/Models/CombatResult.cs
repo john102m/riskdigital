@@ -20,5 +20,14 @@ public record BlitzResult(
     int SourceId,
     int TargetId,
     int SourceArmies,
-    int TargetArmies
+    int TargetArmies,
+    int[] FinalAttackerDice,
+    int[] FinalDefenderDice
+);
+
+public record CombatRollRequest(
+    int SourceId,
+    int TargetId,
+    int AttackerDiceCount,
+    int DefenderDiceCount
 );
