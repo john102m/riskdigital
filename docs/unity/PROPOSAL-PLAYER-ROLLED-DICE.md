@@ -1,4 +1,4 @@
-# Proposal: Player-Rolled Dice
+# Proposal: Player-Rolled Dice ✅ IMPLEMENTED (2026-06-29)
 
 ## Summary
 
@@ -10,82 +10,122 @@ Let the attacker and defender each trigger their own dice roll from their handse
 Attacker taps Attack → Server broadcasts CombatRollRequest → Unity rolls ALL dice → sends result back
 ```
 
-## Proposed Flow
+## Implemented Flow
 
 ```
-1. Attacker taps Attack → Server enters "awaiting rolls" state
-2. Server sends RollPrompt to attacker ("Tap to roll 3 dice")
-3. Server sends RollPrompt to defender ("Tap to roll 2 dice")
-4. Attacker taps Roll → Server notifies Unity to spawn attacker dice
-5. Defender taps Roll → Server notifies Unity to spawn defender dice
-6. Unity reads all faces once both sets have settled → sends result back
-7. Server resolves combat
+Human vs Bot:
+  Attacker taps Attack → both sides roll immediately → dice fly on TV → result
+
+Bot vs Human:
+  Bot attacks → attacker dice fly immediately → defender gets "Defend!" prompt → taps Roll → defender dice fly → result
+
+Human vs Human:
+  Attacker taps Attack → attacker dice fly immediately → defender gets "Defend!" prompt → taps Roll → defender dice fly → result
+
+Bot vs Bot:
+  Both sides auto-roll after 1s delay → dice fly → result
 ```
 
 ## Key Design Decisions
 
-### Ordering
-- Either player can roll first — no enforced order
-- Dice spawn independently as each player rolls
-- Result only resolves once both have settled
+### Attacker Always Rolls Immediately
+- Original proposal had attacker prompted too, but this caused a SignalR deadlock — the hub blocks the caller's connection during `await`, so the same connection can't invoke `RollDice` while `Attack` is still running.
+- Solution: attacker already committed by tapping Attack, so their dice fly immediately. Only defender gets prompted.
 
-### Timeout
-- If a player doesn't roll within 8 seconds, auto-roll for them (same as current)
-- Prevents stalling the game
+### Ordering
+- Attacker dice always spawn first (immediate on Attack call)
+- Defender dice spawn when they tap Roll (or immediately if bot)
+- Camera sweep triggers on first spawn, purely cosmetic — dice physics run regardless of camera position
+- Both sets can be in the air simultaneously if defender rolls quickly
+
+### No Timeout
+- Original design had 8s auto-roll timeout for humans — removed because it's annoying when you're thinking
+- Bots handle themselves; humans roll when ready
+- Game already waits indefinitely for other actions (reinforce, fortify)
 
 ### Bot Handling
-- Bots auto-roll after a randomised delay (1–3 seconds) to simulate thinking
-- No handset prompt needed — server triggers their roll directly
+- Bot defending: rolls immediately when human attacker's dice spawn (via `AutoRollBotOpponent`)
+- Bot attacking: rolls both sides immediately, no prompts
+- Bot vs bot: 1s delay then both roll (gives TV time to show the arena)
 
-### Defender Choice: Dice Count
-- Defender with 2+ armies can choose 1 or 2 dice (standard Risk rule)
-- RollPrompt includes max dice available, defender picks before rolling
-- Default to max if timeout expires
+### Camera Sweep
+- First roll of each attack phase gets the dramatic camera fly
+- Subsequent rolls in same turn stay at result position (arena already visible)
+- Camera flag resets on: phase change OR panel dismissal after capture
 
-## Server Changes
+### WebTV Compatibility
+- `IsUnityTVConnected` gate at top of `AttackWithDice` — if no Unity, entire player-roll system is bypassed
+- Handset never shows Roll prompt without Unity connected
+- WebTV game flow is 100% unchanged
 
-| File | Change |
-|------|--------|
-| Models/ | New `RollPrompt` DTO, new `PlayerRoll` DTO |
-| GameService | New state: `AwaitingRolls` with two TCS (attacker + defender) |
-| GameHub | `Attack()` sends prompts instead of immediate CombatRollRequest |
-| GameHub | New `RollDice()` hub method — player confirms their roll |
-| AiService | Auto-rolls after delay when it's their dice |
+## Files Modified
 
-## Handset Changes
+### Server (`server/Risk.Server/`)
 
-| File | Change |
-|------|--------|
-| useSignalR | Listen for `RollPrompt` event |
-| AttackPhase | Show "Roll!" button when prompted (replaces immediate attack) |
-| DefendPrompt | New component — defender sees dice count choice + roll button |
+| File | Changes |
+|------|---------|
+| `Models/CombatResult.cs` | Added `RollPrompt` record, `SpawnDice` record |
+| `Services/GameService.cs` | Pending roll state fields, `AttackWithDice` rewritten for two-phase flow, `PlayerRoll` method, `AutoRollBotOpponent` helper |
+| `Hubs/GameHub.cs` | Added `RollDice` hub method, `IHubContext` injection |
 
-## Unity Changes
+### Handset (`handset/`)
 
-| File | Change |
-|------|--------|
-| DiceRoller | Split `RollAndRead` into `SpawnAttackerDice` + `SpawnDefenderDice` + `ReadAll` |
-| CombatTheatre | Handle two-phase spawn (attacker dice land, then defender dice land) |
-| SignalRClient | New events: `SpawnAttackerDice`, `SpawnDefenderDice` |
+| File | Changes |
+|------|---------|
+| `src/types/game.ts` | Added `RollPrompt` interface |
+| `src/hooks/useConnection.ts` | `RollPrompt` state + listener at app level (always registered), vibrate on prompt, clears on CombatResult/BlitzResult |
+| `src/App.tsx` | Pass `rollPrompt` + `clearRollPrompt` to AttackScreen |
+| `src/components/AttackScreen.tsx` | Accept rollPrompt as prop, defender sees "Defend!" overlay with dice choice + Roll button |
 
-## UX Feel
+### Unity (`D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\`)
 
-- Attacker sees: "Roll!" button appears → tap → dice fly on TV → satisfying
-- Defender sees: "Defend! (1 or 2 dice)" → chooses → tap → their dice join the arena
-- Spectators see: staggered dice appearing, building tension
-- Bots: dice just appear after a beat, no human input needed
+| File | Changes |
+|------|---------|
+| `SignalRClient.cs` | Added `OnSpawnDice` event + handler |
+| `DiceRoller.cs` | Added `SpawnSet(role, count)`, `WaitAndReadAll()`, `ReadAll()` — order-independent spawning |
+| `CombatTheatre.cs` | `OnSpawnDice` handler (two-phase), `spawnCount` tracking, `cameraFlownThisTurn` flag, reset on capture dismiss |
 
-## Open Questions
+## Bugs Encountered & Fixed
 
-1. Should both sets of dice be in the arena simultaneously, or attacker first then defender?
-2. Do we animate a "shake" on the handset before releasing? (haptic feedback?)
-3. Should the defender dice count choice be a separate step or combined with the roll tap?
+### 1. SignalR Hub Deadlock (Attacker Roll)
+**Symptom:** Human attacker taps "Roll!" — nothing happens.
+**Cause:** `Attack()` hub method `await`s `AttackWithDice()` which waits for the roll. SignalR processes messages per-connection sequentially, so `RollDice` from the same connection queues behind the still-running `Attack`.
+**Fix:** Removed attacker prompt entirely — attacker rolls immediately since they already chose to attack.
 
-## Complexity: Medium
+### 2. Defender Not Seeing Roll Prompt
+**Symptom:** Defender handset shows "Jim Attacking" with no Roll button.
+**Cause:** `RollPrompt` listener was registered inside `AttackScreen` component via `useEffect` with `[connection, isMyTurn]` dependency. Event arrived before effect re-registered or was lost on re-render.
+**Fix:** Moved listener to `useConnection` hook (app-level, always mounted). Passed prompt as prop.
 
-Main risk is timing coordination — two async waits instead of one. The timeout fallback keeps it robust.
+### 3. Bot Delay When Human Rolls
+**Symptom:** Human attacks bot, taps Roll, bot dice appear 1-3s later.
+**Cause:** Fire-and-forget `Task.Run` with random delay for bot auto-roll ran independently.
+**Fix:** `AutoRollBotOpponent` — when a human rolls, immediately trigger the bot's roll in the same call.
 
-## Not in Scope
+### 4. Sequential Await Causing Delay
+**Symptom:** Both rolls complete but 8s timeout still fires.
+**Cause:** `await attackerTask; await defenderTask;` — sequential. If attacker completes and auto-rolls bot defender, the defender task was already created with the 8s delay.
+**Fix:** `await Task.WhenAll(...)` — parallel wait. Then removed timeout entirely.
 
-- Gyro/accelerometer shake-to-roll (future polish)
-- Individual die selection (always roll max unless defender chooses fewer)
+### 5. Dice Not Clearing Between Attacks
+**Symptom:** More dice keep arriving in the arena without clearing old ones.
+**Cause:** `OnSpawnDice` only cleared dice when `!panelVisible`, but panel stayed visible between rapid attacks.
+**Fix:** Clear on `spawnCount == 0` (reset by `CombatResult`), not by panel visibility.
+
+### 6. Camera Sweep Skipped After Capture
+**Symptom:** After a capture dismisses the arena, next attack doesn't get camera sweep.
+**Cause:** `cameraFlownThisTurn` stayed `true` for entire attack phase.
+**Fix:** Reset flag in `HidePanelAfterDelay` when panel dismisses after capture.
+
+### 7. MoveAfterCapture Stuck — Wrong Minimum Move-In
+**Symptom:** "Must move between 2 and 2 armies" error after capturing with Unity dice, can't proceed.
+**Cause:** `ResolveCombat` (Unity dice path) never set `_state.LastDiceCount`. The value was stale from a previous roll, causing incorrect min move-in calculation.
+**Fix:** Added `_state.LastDiceCount = attackerDice.Length` to `ResolveCombat`.
+
+## UX Result
+
+- **Human attacks bot:** Tap Attack → dice fly immediately (both sides) → satisfying instant feedback
+- **Bot attacks human:** Phone vibrates → "Defend!" button appears → tap → your dice fly → result
+- **Human vs human:** Attacker dice fly on Attack tap → defender phone vibrates → they roll → result
+- **Bot vs bot:** 1s pause → both roll → spectators watch
+- **No Unity:** Completely unchanged — instant server rolls, no prompts, no buttons

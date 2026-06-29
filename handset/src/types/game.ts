@@ -71,3 +71,12 @@ export interface BlitzResult {
   sourceArmies: number;
   targetArmies: number;
 }
+
+export interface RollPrompt {
+  role: "attacker" | "defender";
+  diceCount: number;
+  maxDice: number;
+  sourceId: number;
+  targetId: number;
+  playerName: string;
+}

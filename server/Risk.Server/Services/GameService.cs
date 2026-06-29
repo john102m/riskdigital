@@ -22,6 +22,16 @@ public class GameService
     // Pending dice result from Unity TV
     private TaskCompletionSource<(int[] AttackerDice, int[] DefenderDice)>? _pendingDiceResult;
 
+    // Pending player rolls (player-rolled dice feature)
+    private TaskCompletionSource<int>? _pendingAttackerRoll;
+    private TaskCompletionSource<int>? _pendingDefenderRoll;
+    private int _pendingAttackerDiceCount;
+    private int _pendingDefenderDiceCount;
+    private int _pendingSourceId;
+    private int _pendingTargetId;
+    private string? _pendingAttackerConnId;
+    private string? _pendingDefenderConnId;
+
     public GameState? State => _state;
     public TerritoryData MapData => _territoryData;
 
@@ -638,10 +648,52 @@ public class GameService
         var source = _state!.Territories.First(t => t.Id == sourceId);
         var target = _state.Territories.First(t => t.Id == targetId);
         int defenderDiceCount = target.Armies >= 2 ? 2 : 1;
+        var defenderPlayer = _state.Players[target.OwnerId];
 
+        // Store pending roll state
+        _pendingSourceId = sourceId;
+        _pendingTargetId = targetId;
+        _pendingAttackerDiceCount = diceCount;
+        _pendingDefenderDiceCount = defenderDiceCount;
+        _pendingAttackerConnId = connectionId;
+        _pendingDefenderConnId = defenderPlayer.ConnectionId;
+        _pendingAttackerRoll = new TaskCompletionSource<int>();
+        _pendingDefenderRoll = new TaskCompletionSource<int>();
+
+        var attackerPlayer = _state.Players[_state.CurrentPlayerIndex];
+
+        if (attackerPlayer.IsAI && defenderPlayer.IsAI)
+        {
+            // Bot vs bot — roll both after 1s
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1000);
+                await PlayerRoll(hub, connectionId, diceCount);
+                await PlayerRoll(hub, defenderPlayer.ConnectionId, defenderDiceCount);
+            });
+        }
+        else if (defenderPlayer.IsAI)
+        {
+            // Human attacks bot — roll both immediately, no prompts
+            await PlayerRoll(hub, connectionId, diceCount);
+            await PlayerRoll(hub, defenderPlayer.ConnectionId, defenderDiceCount);
+        }
+        else
+        {
+            // Defender is human — attacker rolls immediately, defender gets prompted
+            await PlayerRoll(hub, connectionId, diceCount);
+            _ = Task.Run(() => hub.Clients.All.SendAsync("RollPrompt",
+                new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name)));
+        }
+
+        // Wait for both rolls (no timeout — humans roll when ready, bots roll immediately)
+        await Task.WhenAll(_pendingAttackerRoll.Task, _pendingDefenderRoll.Task);
+
+        int finalAttackerDice = await _pendingAttackerRoll.Task;
+        int finalDefenderDice = await _pendingDefenderRoll.Task;
+
+        // Now wait for Unity to return physics result
         var tcs = CreateDiceRequest();
-        await hub.Clients.All.SendAsync("CombatRollRequest", new CombatRollRequest(sourceId, targetId, diceCount, defenderDiceCount));
-
         var completed = await Task.WhenAny(tcs.Task, Task.Delay(10000));
         if (completed == tcs.Task)
         {
@@ -651,6 +703,49 @@ public class GameService
 
         // Timeout — fall back to server-side roll
         return Attack(connectionId, sourceId, targetId, diceCount);
+    }
+
+    /// <summary>Called when a player taps Roll on their handset.</summary>
+    public async Task PlayerRoll(IHubContext<GameHub> hub, string connectionId, int diceCount)
+    {
+        if (connectionId == _pendingAttackerConnId && _pendingAttackerRoll != null && !_pendingAttackerRoll.Task.IsCompleted)
+        {
+            _pendingAttackerRoll.TrySetResult(diceCount);
+            await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, _pendingSourceId, _pendingTargetId));
+            // If defender is a bot, roll them immediately
+            await AutoRollBotOpponent(hub, "defender");
+        }
+        else if (connectionId == _pendingDefenderConnId && _pendingDefenderRoll != null && !_pendingDefenderRoll.Task.IsCompleted)
+        {
+            int finalCount = Math.Min(diceCount, _pendingDefenderDiceCount);
+            _pendingDefenderDiceCount = finalCount;
+            _pendingDefenderRoll.TrySetResult(finalCount);
+            await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pendingSourceId, _pendingTargetId));
+            // If attacker is a bot, roll them immediately
+            await AutoRollBotOpponent(hub, "attacker");
+        }
+    }
+
+    private async Task AutoRollBotOpponent(IHubContext<GameHub> hub, string role)
+    {
+        if (role == "defender" && _pendingDefenderRoll != null && !_pendingDefenderRoll.Task.IsCompleted)
+        {
+            var defender = _state!.Players.FirstOrDefault(p => p.ConnectionId == _pendingDefenderConnId);
+            if (defender?.IsAI == true)
+            {
+                _pendingDefenderRoll.TrySetResult(_pendingDefenderDiceCount);
+                await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("defender", _pendingDefenderDiceCount, _pendingSourceId, _pendingTargetId));
+            }
+        }
+        else if (role == "attacker" && _pendingAttackerRoll != null && !_pendingAttackerRoll.Task.IsCompleted)
+        {
+            var attacker = _state!.Players.FirstOrDefault(p => p.ConnectionId == _pendingAttackerConnId);
+            if (attacker?.IsAI == true)
+            {
+                _pendingAttackerRoll.TrySetResult(_pendingAttackerDiceCount);
+                await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("attacker", _pendingAttackerDiceCount, _pendingSourceId, _pendingTargetId));
+            }
+        }
     }
 
     /// <summary>Resolve combat using externally-provided dice values (from Unity TV physics).</summary>
@@ -669,6 +764,7 @@ public class GameService
         // Sort dice descending (same as server-rolled path)
         attackerDice = attackerDice.OrderByDescending(d => d).ToArray();
         defenderDice = defenderDice.OrderByDescending(d => d).ToArray();
+        _state.LastDiceCount = attackerDice.Length;
 
         // Compare pairs — defender wins ties
         int attackerLosses = 0, defenderLosses = 0;

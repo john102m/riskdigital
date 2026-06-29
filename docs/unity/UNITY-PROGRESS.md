@@ -70,8 +70,26 @@
 - ✅ Unity: Throw direction randomised for even face distribution
 - ✅ Unity: Capture hold (4s) so players can see the killing blow
 
+## Phase 2e — Player-Rolled Dice ✅ (2026-06-29)
+
+- ✅ Server: RollPrompt + SpawnDice DTOs
+- ✅ Server: AttackWithDice two-phase flow (attacker immediate, defender prompted)
+- ✅ Server: PlayerRoll hub method + AutoRollBotOpponent
+- ✅ Server: Bot-vs-bot auto-roll after 1s, human-vs-bot immediate, human-vs-human prompted
+- ✅ Server: No timeout — humans roll when ready
+- ✅ Server: ResolveCombat now sets LastDiceCount (fixed stuck move-in bug)
+- ✅ Unity: SpawnDice event handler — two-phase dice spawning
+- ✅ Unity: DiceRoller.SpawnSet() order-independent, WaitAndReadAll()
+- ✅ Unity: Camera sweep once per attack (resets on capture dismiss + phase change)
+- ✅ Unity: Blitz result gets camera sweep before placed dice
+- ✅ Handset: RollPrompt listener at app level (useConnection hook, always mounted)
+- ✅ Handset: Defender "Defend!" overlay with dice count choice + Roll button
+- ✅ Handset: Vibrate on defend prompt
+- ✅ Gated by IsUnityTVConnected — WebTV/handset flow unchanged without Unity
+
 ## Tech Debt / Polish Queue
 
+- [ ] Dice physics tuning session — settle detection (add angular velocity check + "stable for N frames"), PhysicsMaterial tweaks, damping to prevent edge-balancing, possible slam-down force
 - [ ] Dice face textures (pips visible on FBX model but tint overrides — consider texture-preserving tint)
 - [ ] DicePanel frame/border (UI Image behind RawImage for TV-screen effect)
 - [ ] Reinforcement pulse (brief pulse on army placement)

@@ -31,3 +31,21 @@ public record CombatRollRequest(
     int AttackerDiceCount,
     int DefenderDiceCount
 );
+
+/// <summary>Sent to a player's handset telling them to tap Roll.</summary>
+public record RollPrompt(
+    string Role,        // "attacker" or "defender"
+    int DiceCount,      // how many dice they'll roll (attacker: chosen, defender: max available)
+    int MaxDice,        // max dice available (defender can choose fewer)
+    int SourceId,
+    int TargetId,
+    string PlayerName   // who should roll — handset filters on this
+);
+
+/// <summary>Sent to Unity TV to spawn one player's dice.</summary>
+public record SpawnDice(
+    string Role,        // "attacker" or "defender"
+    int DiceCount,
+    int SourceId,
+    int TargetId
+);

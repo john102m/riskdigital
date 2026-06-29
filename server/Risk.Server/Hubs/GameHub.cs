@@ -123,6 +123,11 @@ public class GameHub : Hub
         await BroadcastState(state);
     }
 
+    public async Task RollDice(int diceCount)
+    {
+        await _game.PlayerRoll(_hubContext, Context.ConnectionId, diceCount);
+    }
+
     public async Task Blitz(int sourceId, int targetId)
     {
         _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, true);

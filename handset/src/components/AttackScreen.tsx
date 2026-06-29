@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { HubConnection } from "@microsoft/signalr";
-import { Card, GameState, CombatResult, BlitzResult } from "../types/game";
+import { Card, GameState, CombatResult, BlitzResult, RollPrompt } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
@@ -14,9 +14,11 @@ interface Props {
   cards: Card[];
   forcedTrade: boolean;
   clearForcedTrade: () => void;
+  rollPrompt: RollPrompt | null;
+  clearRollPrompt: () => void;
 }
 
-export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade }: Props) {
+export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -31,6 +33,12 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   const [blitzSummary, setBlitzSummary] = useState<{ rounds: number; atkLoss: number; defLoss: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>("__init__");
   const [idleHint, setIdleHint] = useState<string | null>(null);
+
+  // Vibrate when this player is asked to defend
+  useEffect(() => {
+    if (rollPrompt?.role === "defender" && rollPrompt.playerName === playerName)
+      navigator.vibrate?.([100, 50, 100]);
+  }, [rollPrompt]);
 
   // Idle hint: show context-aware prompt after 5s inactivity
   useEffect(() => {
@@ -101,7 +109,18 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   const attack = async () => {
     if (sourceId === null || targetId === null) return;
     try {
+      navigator.vibrate?.([50, 30, 50]);
       await connection.invoke("Attack", sourceId, targetId, effectiveDice);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const rollDice = async (count?: number) => {
+    try {
+      navigator.vibrate?.([50, 30, 50]);
+      await connection.invoke("RollDice", count ?? rollPrompt?.diceCount ?? 1);
+      clearRollPrompt();
     } catch (e: any) {
       alert(e.message);
     }
@@ -160,10 +179,25 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
         <div className="flex items-center justify-center gap-2 min-h-[33px]">
           <CardBadge cards={cards} territories={gameState.territories} />
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
-          <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Attacking</span>
-        </div>
+        {rollPrompt && rollPrompt.role === "defender" && rollPrompt.playerName === playerName ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4">
+            <span className="text-lg font-bold text-red-400">Defend!</span>
+            <span className="text-sm text-gray-400">{gameState.territories.find(t => t.id === rollPrompt.targetId)?.name}</span>
+            <button onClick={() => rollDice(rollPrompt.maxDice)} className="bg-red-600 active:bg-red-700 px-8 py-4 rounded-lg text-xl font-bold animate-pulse">
+              🎲 Roll {rollPrompt.maxDice}!
+            </button>
+            {rollPrompt.maxDice > 1 && (
+              <button onClick={() => rollDice(1)} className="bg-gray-700 active:bg-gray-600 px-6 py-2 rounded-lg text-sm">
+                Roll 1 instead
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>
+            <span className="text-sm text-gray-400 mt-1 uppercase tracking-wider">Attacking</span>
+          </div>
+        )}
       </div>
     );
   }

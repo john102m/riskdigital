@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { Card, GameState, Mission } from "../types/game";
+import { Card, GameState, Mission, RollPrompt } from "../types/game";
 
 const HUB_URL = import.meta.env.VITE_SERVER_URL
   ? `${import.meta.env.VITE_SERVER_URL}/gamehub`
@@ -13,6 +13,7 @@ export function useConnection() {
   const [cards, setCards] = useState<Card[]>([]);
   const [forcedTrade, setForcedTrade] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
+  const [rollPrompt, setRollPrompt] = useState<RollPrompt | null>(null);
 
   useEffect(() => {
     const conn = new signalR.HubConnectionBuilder()
@@ -30,6 +31,9 @@ export function useConnection() {
       setCards(hand);
       setForcedTrade(true);
     });
+    conn.on("RollPrompt", (prompt: RollPrompt) => { setRollPrompt(prompt); });
+    conn.on("CombatResult", () => setRollPrompt(null));
+    conn.on("BlitzResult", () => setRollPrompt(null));
 
     conn.onreconnected(() => {
       const name = localStorage.getItem("risk_name");
@@ -66,5 +70,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false) };
+  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null) };
 }
