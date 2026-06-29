@@ -11,14 +11,16 @@ public class GameHub : Hub
     private readonly ActionLogger _log;
     private readonly MlModels _ml;
     private readonly ILogger<GameHub> _logger;
+    private readonly IHubContext<GameHub> _hubContext;
 
-    public GameHub(GameService game, AiService ai, ActionLogger log, MlModels ml, ILogger<GameHub> logger)
+    public GameHub(GameService game, AiService ai, ActionLogger log, MlModels ml, ILogger<GameHub> logger, IHubContext<GameHub> hubContext)
     {
         _game = game;
         _ai = ai;
         _log = log;
         _ml = ml;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     public async Task GetLobbyStatus()
@@ -114,7 +116,9 @@ public class GameHub : Hub
     public async Task Attack(int sourceId, int targetId, int diceCount)
     {
         _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, false);
-        var (state, result) = _game.Attack(Context.ConnectionId, sourceId, targetId, diceCount);
+
+        var (state, result) = await _game.AttackWithDice(_hubContext, Context.ConnectionId, sourceId, targetId, diceCount);
+
         await Clients.All.SendAsync("CombatResult", result);
         await BroadcastState(state);
     }
@@ -203,13 +207,24 @@ public class GameHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        // TODO: Handle player disconnect (timeout/reconnect window)
+        _game.UnregisterTV(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 
     public async Task SelectAttack(int? sourceId, int? targetId)
     {
         await Clients.Others.SendAsync("AttackSelection", sourceId, targetId);
+    }
+
+    public Task RegisterAsTV()
+    {
+        _game.RegisterAsTV(Context.ConnectionId);
+        return Task.CompletedTask;
+    }
+
+    public void SubmitDiceResult(int[] attackerDice, int[] defenderDice)
+    {
+        _game.SubmitDiceResult(attackerDice, defenderDice);
     }
 
     private async Task BroadcastState(object state)

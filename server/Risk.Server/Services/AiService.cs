@@ -265,7 +265,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 // Medium confidence — single attack
                 int dice = Math.Min(3, bestSource.Armies - 1);
-                var (_, result) = game.Attack(connId, bestSource.Id, bestTarget.Id, dice);
+                var (_, result) = await game.AttackWithDice(hub, connId, bestSource.Id, bestTarget.Id, dice);
                 await hub.Clients.All.SendAsync("CombatResult", result);
                 await Broadcast();
 
@@ -346,7 +346,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             else
             {
                 int dice = Math.Min(3, source.Armies - 1);
-                var (_, result) = game.Attack(connId, source.Id, target.Id, dice);
+                var (_, result) = await game.AttackWithDice(hub, connId, source.Id, target.Id, dice);
                 await hub.Clients.All.SendAsync("CombatResult", result);
                 await Broadcast();
 
@@ -397,7 +397,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         await Delay(1500, 2000);
 
         int dice = Math.Min(3, source.Armies - 1);
-        var (_, result) = game.Attack(connId, source.Id, target.Id, dice);
+        var (_, result) = await game.AttackWithDice(hub, connId, source.Id, target.Id, dice);
         await hub.Clients.All.SendAsync("CombatResult", result);
         await Broadcast();
 
@@ -623,7 +623,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             else
             {
                 int dice = Math.Min(3, bestSource.Armies - 1);
-                var (_, result) = game.Attack(connId, bestSource.Id, bestTarget.Id, dice);
+                var (_, result) = await game.AttackWithDice(hub, connId, bestSource.Id, bestTarget.Id, dice);
                 await hub.Clients.All.SendAsync("CombatResult", result);
                 await Broadcast();
 

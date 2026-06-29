@@ -33,14 +33,52 @@
 - ✅ Panel persists through repeated rolls in same battle
 - ✅ Panel hides on: capture, phase change, or new attack selection
 
+## Phase 2c — Dice Arena Upgrade ✅ (2026-06-28)
+
+- ✅ Reshaped arena to rectangular cuboid (12×7 box lid)
+- ✅ Low-angle perspective camera (table-level view)
+- ✅ Directional throw (+Z along the box, not straight down)
+- ✅ RenderTexture + RawImage aspect ratio matched to arena (960×560)
+- ✅ Layer isolation (DiceArena layer) — dice camera only sees arena
+- ✅ FBX dice model imported (replaces plain cubes)
+- ✅ Catmull-Rom camera flypath (CameraFlypath.cs)
+  - Waypoints as draggable empties in scene
+  - OnDrawGizmos for spline visualisation
+  - Randomised per-roll: jitter, speed variation, direction reversal
+  - Smooth transition to overhead result position (random point on circle)
+- ✅ CombatTheatre fires flypath in parallel with dice roll
+
+## Phase 2d — TV-Driven Dice Physics ✅ (2026-06-29)
+
+- ✅ Server: RegisterAsTV hub method + Unity TV connection tracking
+- ✅ Server: CombatRollRequest DTO + broadcast to Unity
+- ✅ Server: SubmitDiceResult hub method (receives physics results)
+- ✅ Server: ResolveCombat method (uses external dice values)
+- ✅ Server: Attack() branches — delegates to Unity if connected, else server rolls
+- ✅ Server: 10s timeout fallback to server roll
+- ✅ Server: AttackWithDice() shared method — used by both hub and AI
+- ✅ Server: Bot attacks now delegate to Unity dice (single attacks, not blitz)
+- ✅ Server: BlitzResult includes final round dice for display
+- ✅ Server: /admin/testdice endpoint for triggering test rolls
+- ✅ Unity: RegisterAsTV call on connect
+- ✅ Unity: CombatRollRequest event handler
+- ✅ Unity: DiceRoller.RollAndRead() — pure physics, no face correction
+- ✅ Unity: DiceFaceReader axis→face mapping calibrated and verified
+- ✅ Unity: Sends results back to server immediately (before visual hold)
+- ✅ Unity: Blitz final dice display (PlaceDiceAtValues — scattered, jaunty, correct faces)
+- ✅ Unity: Camera snaps to result position for blitz display
+- ✅ Unity: Throw direction randomised for even face distribution
+- ✅ Unity: Capture hold (4s) so players can see the killing blow
+
 ## Tech Debt / Polish Queue
 
-- [ ] Emission changes base colour (orange → yellow) — need subtler glow approach
-- [ ] Dice face textures (pips or numbers) — currently plain cubes
+- [ ] Dice face textures (pips visible on FBX model but tint overrides — consider texture-preserving tint)
+- [ ] DicePanel frame/border (UI Image behind RawImage for TV-screen effect)
 - [ ] Reinforcement pulse (brief pulse on army placement)
-- [ ] Remove debug logs before next release
+- [ ] Remove debug logging (DiceFace dot products, DiceRoller spawn/read logs)
 - [ ] DicePanel positioning/sizing for TV layout
-- [ ] Camera angle and lighting in dice arena
+- [ ] Arena lighting and floor material polish
+- [ ] GetRotationForFace verification (blitz placed dice may need Euler angle tweaks)
 
 ## Codebase Refactoring ✅ (2026-06-27)
 
@@ -50,9 +88,9 @@
 
 ## Next Up — Phase 2 Completion
 
-- [ ] Blitz result display (summary overlay, no individual rolls)
 - [ ] Dice result overlay text (who won each pair)
 - [ ] Sound effects (dice rattle, bounce, result sting)
+- [ ] Blitz summary text overlay (X rounds, attacker/defender losses)
 
 ## Phase 3 — Parity with Web Board (not started)
 
