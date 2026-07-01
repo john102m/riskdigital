@@ -122,6 +122,16 @@ Bot vs Bot:
 **Cause:** `ResolveCombat` (Unity dice path) never set `_state.LastDiceCount`. The value was stale from a previous roll, causing incorrect min move-in calculation.
 **Fix:** Added `_state.LastDiceCount = attackerDice.Length` to `ResolveCombat`.
 
+### 8. Defender Roll Prompt Lost After Reconnect — Game Frozen
+**Symptom:** Bot attacks human, defender's phone screen went off and SignalR reconnected. No "Defend!" prompt appears. Game freezes — both handsets show "Bot Alice Attacking", TV shows glowing tokens, nothing progresses.
+**Cause:** `PendingCombat` stored the defender's `ConnectionId` at combat creation time. After phone sleep → reconnect, `Rejoin` assigns a new connection ID to the player, but `PlayerRoll` compared against the stale ID stored in `PendingCombat`. The defender could never match, so `DefenderRoll` TCS never completed, and `AttackWithDice` awaited forever.
+**Fix:** Store `AttackerPlayerIndex` / `DefenderPlayerIndex` (stable) instead of connection IDs. `PlayerRoll` looks up the *current* connection ID from `_state.Players[index].ConnectionId` at match time. Additionally, `Rejoin` now re-sends `RollPrompt` to the caller if they're the pending defender — handles cases where the original broadcast was lost during reconnect.
+
+### 9. Blitz Panel Stomps Next Combat — Arena Dismissed Mid-Roll
+**Symptom:** Bot blitzes and captures a bot territory, then immediately attacks a human. Human sees "Roll 1" defend prompt but the dice arena is dismissed on Unity. Looks frozen.
+**Cause:** `ShowBlitzDice` is an ~8-9s async sequence (camera sweep + 6s display). Bot's next attack fires `SpawnDice("attacker")` after ~4s, which correctly transitions to `WaitingForDice` and shows the panel. But the old `ShowBlitzDice` awaitable is still running — when its 6s await completes, it calls `ShowPanel(false)` and `ClearDice()`, stomping on the new active combat.
+**Fix:** Added state guards (`if (state != CombatState.ShowingBlitz) return;`) after each await in `ShowBlitzDice`. If something else has taken over (state changed away from `ShowingBlitz`), the old async bails out instead of hiding the panel.
+
 ## UX Result
 
 - **Human attacks bot:** Tap Attack → dice fly immediately (both sides) → satisfying instant feedback

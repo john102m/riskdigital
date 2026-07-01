@@ -3,6 +3,9 @@
 ## Server (C#/.NET)
 - Minimal API style — no controllers. All SignalR, no REST endpoints beyond health/admin.
 - Hub methods are the API surface. Keep `GameHub.cs` thin — delegate to service classes.
+- **Partial class split:** `GameService` split by concern (`GameService.cs`, `.Combat.cs`, `.Turn.cs`).
+- **Statics at top:** Static fields and constants declared before instance members.
+- **Regions:** Used to group related methods within a file.
 - Models in `Models/` — plain C# classes, no EF annotations.
 - Singleton game state for single-game sessions.
 - Use `record` types for DTOs sent over SignalR where immutability makes sense.
@@ -24,12 +27,15 @@
 - Target: any browser — Fire Stick Silk, phone, laptop. No install needed.
 
 ## TV — Unity Board (C#)
+- Unity 6 LTS, 3D URP. Separate repo.
 - Static map background image with army tokens at defined x/y coordinates.
 - `SignalRClient.cs` handles connection and deserialization.
-- `GameStateManager.cs` holds current state, fires change events.
-- Dark theme by default (TV viewing, Fire Stick target).
-- Layered rendering approach: v1 tokens → v2 territory tints → v3 polish.
-- Target: Android APK sideloaded via ADB. Premium experience.
+- `GameStateManager.cs` holds reactive state, fires change events.
+- `CombatTheatre.cs` uses explicit `CombatState` enum (state machine, not flags).
+- `async Awaitable` pattern (Unity 6) — not coroutines.
+- `CancellationTokenSource` for interruptible animations.
+- Dark theme. Designed for Fire TV Stick 4K Max via ADB sideload (desktop fallback).
+- Ownership shown via coloured circles with army counts (v1), territory tint fills later (v2).
 
 ## Cross-cutting
 - Game logic lives ONLY on the server. Clients are dumb renderers/controllers.

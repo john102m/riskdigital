@@ -1,5 +1,68 @@
 # Risk Digital — Progress Log
 
+## 2026-06-29 Evening — Combat State Machine Testing, Bug Fixes, Error Handling, Docs
+
+### Completed
+
+- **Bug fix: Defender roll deadlock on reconnect** — `PendingCombat` stored connection IDs which went stale on phone sleep/reconnect. Refactored to store player indices; `PlayerRoll` now looks up *current* connection ID at match time. `Rejoin` re-sends `RollPrompt` to pending defender.
+- **Bug fix: Blitz panel stomps next combat** — `ShowBlitzDice` async sequence continued running after a new combat started, calling `ShowPanel(false)` and killing the active arena. Added state guards (`if (state != ShowingBlitz) return`) after each await.
+- **Bug fix: Arena not dismissed on server timeout fallback** — `OnCombatResult` was ignored when in `WaitingForDice` state. Now dismisses panel (server resolved without Unity physics).
+- **Error handling fix 1: 30s roll phase timeout** — `AttackWithDice` no longer awaits indefinitely if defender prompt is lost. Falls back to server roll.
+- **Error handling fix 2: AI turn failure recovery** — if bot throws mid-turn, catch block forces through remaining phases and advances to next player. Game never freezes on bot error.
+- **Error handling fix 3: Unity disconnect immediate fallback** — `UnregisterTV` now calls `TrySetCanceled()` on pending dice TCS. Instant server-side fallback instead of 10s timeout.
+- **Error handling fix 4: ForcedTrade re-send on rejoin** — if player with 5+ cards disconnects during reinforce/attack, `Rejoin` re-sends `ForcedTradeRequired` event.
+- **Mermaid flow diagrams** — `docs/unity/COMBAT-FLOW.md` with state diagram, 4 sequence diagrams (all actor combos), flowchart, reconnect recovery.
+- **Roadmap created** — `docs/proposals/ROADMAP.md` replacing stale NEXT-STEPS. Tiered A→E priority bands.
+- **Error handling proposal** — `docs/proposals/PROPOSAL-ERROR-HANDLING.md` with 6 items ranked by impact.
+- **Deployment targets doc** — `docs/design/DEPLOYMENT-TARGETS.md` covering Fire Stick, Desktop, WebGL, tv.html.
+- **Board Level 2 vision** — `docs/unity/BOARD-LEVEL2-VISION.md` — relief map, drone camera system, implementation order.
+- **File map regenerated** — `docs/setup/FILE-MAP.md` updated for current state of both repos.
+- **Unity docs README** — pointer in Unity repo's docs folder to canonical location in RiskDigital.
+- **Glossary updated** — added Token, TCS, PendingCombat, Awaitable, and other technical terms.
+- **`PendingCombat` class** — noted for future extraction to Models/ folder.
+- **Testdice endpoint** — confirmed working mid-game but needs timing polish (camera jumpy, short dwell). Parked.
+
+### Bug Writeups
+
+- Bug #8 (reconnect deadlock) and Bug #9 (blitz panel stomp) added to `PROPOSAL-PLAYER-ROLLED-DICE.md`
+
+### Files Changed
+
+- `server/Risk.Server/Services/GameService.cs` — PendingCombat refactored (player indices, GetPending(), UnregisterTV cancel)
+- `server/Risk.Server/Services/GameService.Combat.cs` — 30s roll timeout, IsCanceled check, PlayerRoll uses index lookup
+- `server/Risk.Server/Services/AiService.cs` — failure recovery in catch block
+- `server/Risk.Server/Hubs/GameHub.cs` — Rejoin re-sends RollPrompt + ForcedTrade
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` — ShowBlitzDice state guards, OnCombatResult WaitingForDice dismiss
+- `docs/unity/COMBAT-FLOW.md` — new
+- `docs/unity/BOARD-LEVEL2-VISION.md` — new
+- `docs/proposals/ROADMAP.md` — new
+- `docs/proposals/PROPOSAL-ERROR-HANDLING.md` — new
+- `docs/design/DEPLOYMENT-TARGETS.md` — new
+- `docs/setup/FILE-MAP.md` — regenerated
+- `docs/unity/PROPOSAL-PLAYER-ROLLED-DICE.md` — bugs #8, #9 added
+- `docs/unity/UNITY-PROGRESS.md` — DicePanel frame removed (design decision)
+- `docs/GLOSSARY.md` — technical terms added
+- `D:\Unity Projects\RiskDigitalBoard\docs\README.md` — new (pointer to canonical docs)
+
+### Design Decisions
+
+- Dice arena stays as-is (floating wood box, no frame — intentionally minimal and prominent)
+- Board Level 2 target: relief map + drone camera (builds incrementally on current flat board)
+- Fire Stick remains primary Unity target — all design decisions validated for that hardware
+- Unit tests deferred until gameplay/rules stabilise (oracle not yet determined)
+
+### Tomorrow: Pick Up From
+
+1. Continue playtesting combat state machine refactor
+2. Begin Board Level 2 Layer 1 (camera angle + table surface + lighting)
+3. Dice physics tuning session (when ready — parked today)
+
+---
+
+*Updated: 2026-06-29 23:05*
+
+---
+
 ## 2026-06-20 Session — Project Setup, Scaffolding & Lobby Flow
 
 ### Completed
@@ -812,3 +875,56 @@ From zero to a fully playable, deployed digital board game:
 - ✅ 22+ docs covering design, AI, ML, setup, progress
 
 *Updated: 2026-06-25 20:59*
+
+---
+
+## 2026-06-30 Evening — Dice Physics, Sound, Panel Positioning, Board Camera Zoom
+
+### Completed
+
+- **Dice physics tuning discussion doc** — `docs/unity/DICE-PHYSICS-TUNING.md`. Documents all current settings (Rigidbody, PhysicsMaterial, DiceRoller script), identifies problems, proposes tuning values. Floor/walls had no PhysicsMaterial at all (Unity defaults). Settled on damping + friction approach, mass stays at 1.
+- **Dice sound system** — `DiceSound.cs` on die prefab. Uses static flag so only the first die to hit the floor plays the rattle clip per throw. `DiceSound.Arm()` called from `DiceRoller.SpawnSet()` to re-arm for each spawn (attacker and defender get their own rattle). Height gate (`soundBelowY`) prevents sounds from dice bumping mid-air on launch.
+- **Gravity increased** — Project Settings → Physics → Gravity Y tweaked for faster, weightier dice fall.
+- **Dynamic dice panel positioning** — Three fixed X positions for the dice arena panel (left/right/centre), chosen based on territory positions. Logic: average X of source+target < 50% → panel right, > 50% → panel left, wrap-around gap > 50% → panel centre. Inspector fields on CombatTheatre: `panelXLeft`, `panelXCentre`, `panelXRight`.
+- **Board camera zoom** — `BoardCamera.cs` on Main Camera. Smooth lerp zoom (orthographic size reduction + position pan) to midpoint of attacking territories on attack selection. Zooms back out after capture hide or phase change. Stays zoomed through dice roll and move-in.
+- **Panel-aware camera bias** — When dice panel is on the left, camera shifts right (and vice versa) so the action stays visible beside the panel. `panelBiasOffset` field on BoardCamera for tuning. Centre panel = no bias.
+- **Settle detection fix documented** — angular velocity check + stable-for-N-frames approach in tuning doc.
+- **Deleted old Die.prefab** — Red-die is the only dice prefab now.
+
+### Files Created
+
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\DiceSound.cs` — collision-triggered rattle (static one-per-throw)
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardCamera.cs` — smooth zoom in/out for combat
+- `docs/unity/DICE-PHYSICS-TUNING.md` — discussion doc
+- `docs/unity/PROPOSAL-DICE-PANEL-POSITION.md` — panel positioning proposal
+
+### Files Modified
+
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\DiceRoller.cs` — calls `DiceSound.Arm()` in SpawnSet
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` — panel positioning logic (3-way), zoom in on attack selection, zoom out on resolve, panel bias calculation
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardRenderer.cs` — added `GetTerritoryX()` and `GetTerritoryWorldPosition()` static/public helpers
+
+### Design Decisions
+
+- Dice rattle plays once per throw (not per die, not per bounce) — triggered by first floor contact
+- Panel positioning uses average X of territories, not individual checks — simpler, handles Europe correctly
+- Camera stays zoomed from selection through move-in — only zooms out on capture dismiss (4s) or phase change
+- Gravity increase rather than mass decrease for weightier dice feel
+- Centre panel position reserved exclusively for cross-map wrap-around (Kamchatka vs Alaska)
+
+### Inspector Setup Required
+
+- Main Camera: Add BoardCamera component, set Zoom In Size and Zoom Speed
+- CombatTheatre: Panel X Left/Centre/Right values visible under "Panel Positioning" header
+- Red-die prefab: DiceSound component with rattle clip assigned, soundBelowY set above floor
+
+### Next
+
+- Continue tuning dice physics in Inspector (angular damping, floor material)
+- Test panel positioning across various territory combinations
+- Verify camera zoom feels right at different zoom levels
+- Record real dice in a box for authentic sound (longer term)
+
+---
+
+*Updated: 2026-06-30 22:49*

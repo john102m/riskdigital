@@ -44,6 +44,34 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         catch (Exception ex)
         {
             Console.WriteLine($"AI error: {ex.Message}");
+            try
+            {
+                var state = game.State;
+                if (state is null || state.Phase != GamePhase.Playing) return;
+                var player = state.Players[state.CurrentPlayerIndex];
+                if (!player.IsAI) return; // safety — don't advance a human's turn
+
+                var connId = player.ConnectionId;
+
+                // Force through remaining phases so game doesn't freeze
+                if (state.TurnPhase == TurnPhase.Reinforce)
+                {
+                    // Dump remaining armies on random owned territory
+                    var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
+                    while (player.ReinforcementsRemaining > 0 && owned.Count > 0)
+                        game.Reinforce(connId, owned[Random.Shared.Next(owned.Count)].Id);
+                    game.EndReinforce(connId);
+                }
+                if (state.TurnPhase == TurnPhase.Attack)
+                    game.EndAttack(connId);
+                if (state.TurnPhase == TurnPhase.Fortify)
+                    game.EndTurn(connId);
+
+                await Broadcast();
+                await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+                TriggerIfAi();
+            }
+            catch { /* last resort — at least we tried */ }
         }
     }
 
