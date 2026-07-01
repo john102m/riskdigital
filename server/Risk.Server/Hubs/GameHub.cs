@@ -184,6 +184,25 @@ public class GameHub : Hub
                 await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
                 if (player.Mission is not null)
                     await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
+
+                // Re-send RollPrompt if this player is the pending defender
+                var pending = _game.GetPending();
+                if (pending != null && !pending.DefenderRoll.Task.IsCompleted)
+                {
+                    var playerIndex = _game.State.Players.IndexOf(player);
+                    if (playerIndex == pending.DefenderPlayerIndex)
+                        await Clients.Caller.SendAsync("RollPrompt",
+                            new RollPrompt("defender", pending.DefenderDiceCount, pending.DefenderDiceCount, pending.SourceId, pending.TargetId, player.Name));
+                }
+
+                // Re-send ForcedTradeRequired if player has 5+ cards and it's their reinforce turn
+                if (_game.State.Phase == GamePhase.Playing
+                    && (_game.State.TurnPhase == TurnPhase.Reinforce || _game.State.TurnPhase == TurnPhase.Attack)
+                    && _game.State.Players[_game.State.CurrentPlayerIndex] == player
+                    && player.Cards.Count >= 5)
+                {
+                    await Clients.Caller.SendAsync("ForcedTradeRequired", player.Cards);
+                }
             }
         }
     }

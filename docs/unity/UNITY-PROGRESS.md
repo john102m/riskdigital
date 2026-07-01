@@ -91,7 +91,7 @@
 
 - [ ] Dice physics tuning session — settle detection (add angular velocity check + "stable for N frames"), PhysicsMaterial tweaks, damping to prevent edge-balancing, possible slam-down force
 - [ ] Dice face textures (pips visible on FBX model but tint overrides — consider texture-preserving tint)
-- [ ] DicePanel frame/border (UI Image behind RawImage for TV-screen effect)
+- [x] ~~DicePanel frame/border~~ — decided against. Floating wood arena is intentional; no frame needed.
 - [ ] Reinforcement pulse (brief pulse on army placement)
 - [ ] Remove debug logging (DiceFace dot products, DiceRoller spawn/read logs)
 - [ ] DicePanel positioning/sizing for TV layout
@@ -104,11 +104,23 @@
 - ✅ CancellationTokenSource for pulse animation cancellation
 - ✅ `Application.runInBackground = true` (fixes focus-loss freezing)
 
-## Next Up — Phase 2 Completion
+## Next Up — Combat State Machine Refactor (in progress)
 
+Priority: consolidate before adding more features. Sequencing bugs from flag juggling.
+
+- [ ] Unity: Replace CombatTheatre flags with explicit `CombatState` enum (see PROPOSAL-COMBAT-STATE-MACHINE.md)
+- [ ] Unity: Clear state transitions with entry/exit actions
+- [ ] Server: Extract pending roll fields into `PendingCombat` class
+- [ ] Both: Add clear comments explaining each state and transition
+- [ ] Glossary created (docs/GLOSSARY.md) — shared vocabulary for code and conversation
+
+## After Refactor — Phase 2 Completion
+
+- [ ] Dice physics tuning session (settle detection, PhysicsMaterial, damping)
 - [ ] Dice result overlay text (who won each pair)
 - [ ] Sound effects (dice rattle, bounce, result sting)
 - [ ] Blitz summary text overlay (X rounds, attacker/defender losses)
+- [ ] Remove debug logging
 
 ## Phase 3 — Parity with Web Board (not started)
 
