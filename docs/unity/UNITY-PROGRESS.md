@@ -104,15 +104,14 @@
 - ✅ CancellationTokenSource for pulse animation cancellation
 - ✅ `Application.runInBackground = true` (fixes focus-loss freezing)
 
-## Next Up — Combat State Machine Refactor (in progress)
+## Combat State Machine Refactor ✅ (2026-07-02)
 
-Priority: consolidate before adding more features. Sequencing bugs from flag juggling.
-
-- [ ] Unity: Replace CombatTheatre flags with explicit `CombatState` enum (see PROPOSAL-COMBAT-STATE-MACHINE.md)
-- [ ] Unity: Clear state transitions with entry/exit actions
-- [ ] Server: Extract pending roll fields into `PendingCombat` class
-- [ ] Both: Add clear comments explaining each state and transition
-- [ ] Glossary created (docs/GLOSSARY.md) — shared vocabulary for code and conversation
+- ✅ Unity: Replaced CombatTheatre flags with explicit `CombatState` enum (see PROPOSAL-COMBAT-STATE-MACHINE.md)
+- ✅ Unity: Clear state transitions with entry/exit actions
+- ✅ Server: Extracted pending roll fields into `PendingCombat` class
+- ✅ Both: Added clear comments explaining each state and transition
+- ✅ Error handling added throughout
+- ✅ Glossary created (docs/GLOSSARY.md) — shared vocabulary for code and conversation
 
 ## After Refactor — Phase 2 Completion
 
@@ -122,13 +121,17 @@ Priority: consolidate before adding more features. Sequencing bugs from flag jug
 - [ ] Blitz summary text overlay (X rounds, attacker/defender losses)
 - [ ] Remove debug logging
 
-## Phase 3 — Parity with Web Board (not started)
+## Phase 3 — Parity with Web Board ✅ (2026-07-02)
 
-- [ ] Turn popup (whose turn + colour)
-- [ ] Activity feed (attack/fortify/card trade log)
-- [ ] Card trade alert
-- [ ] Game over / winner announcement
-- [ ] Fortify animation
+- ✅ Turn popup (3D world-space canvas, scale bounce in/tilt fade out, player name + colour)
+- ✅ Activity feed (attack/fortify/card trade log) — dynamic height, hidden when empty
+- ✅ Card trade alert (in activity feed)
+- ✅ Game over / winner announcement (zoom out + clear arena → delay → popup + victory sound)
+- ✅ Fortify animation (pulse shrink source, pulse grow target)
+- ✅ Reinforce pulse + click sound on army placement
+- ✅ Sound effects: turn, reinforce click, attack alert, capture win, attack fail, blitz rattle → win/fail, victory
+- ✅ TurnStarted + MissionComplete SignalR events wired up
+- ✅ Blitz consecutive attack delay (3s minimum hold before next blitz takes over camera)
 
 ## Phase 4 — Visual Polish (not started)
 

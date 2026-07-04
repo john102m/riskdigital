@@ -12,7 +12,7 @@ import { MissionWelcome } from "./components/MissionWelcome";
 import { StatusBadge } from "./components/StatusBadge";
 
 export default function App() {
-  const { connection, gameState, cards, mission, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt } = useConnection();
+  const { connection, gameState, cards, mission, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
   const [showMissionWelcome, setShowMissionWelcome] = useState(false);
   const [lastTurnIndex, setLastTurnIndex] = useState<number | null>(null);
@@ -67,7 +67,7 @@ export default function App() {
     }
 
     if (gameState.turnPhase === "Attack") {
-      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} rollPrompt={rollPrompt} clearRollPrompt={clearRollPrompt} /></>;
+      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} rollPrompt={rollPrompt} clearRollPrompt={clearRollPrompt} combatInProgress={combatInProgress} /></>;
     }
 
     if (gameState.turnPhase === "Fortify") {

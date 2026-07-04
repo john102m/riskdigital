@@ -34,6 +34,8 @@ public class GameHub : Hub
         var state = _game.CreateGame(playerName, Context.ConnectionId, colourIndex, avatarIndex);
         await BroadcastState(state);
         await BroadcastLobbyStatus();
+        var createdPlayer = state.Players[0];
+        await Clients.All.SendAsync("PlayerJoined", createdPlayer.Name, createdPlayer.Colour);
     }
 
     public async Task JoinGame(string gameCode, string playerName, int colourIndex = 0, int avatarIndex = 0)
@@ -41,6 +43,8 @@ public class GameHub : Hub
         var state = _game.JoinGame(gameCode, playerName, Context.ConnectionId, colourIndex, avatarIndex);
         await BroadcastState(state);
         await BroadcastLobbyStatus();
+        var joinedPlayer = state.Players[^1];
+        await Clients.All.SendAsync("PlayerJoined", joinedPlayer.Name, joinedPlayer.Colour);
     }
 
     public async Task AddAI(int tier = 2, string? personality = null)
@@ -48,6 +52,8 @@ public class GameHub : Hub
         var state = _game.AddAiPlayer(Context.ConnectionId, tier, personality);
         await BroadcastState(state);
         await BroadcastLobbyStatus();
+        var aiPlayer = state.Players[^1];
+        await Clients.All.SendAsync("PlayerJoined", aiPlayer.Name, aiPlayer.Colour);
     }
 
     public async Task RemoveAI(int playerIndex)
@@ -117,10 +123,12 @@ public class GameHub : Hub
     {
         _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, false);
 
+        await Clients.All.SendAsync("CombatStarted");
         var (state, result) = await _game.AttackWithDice(_hubContext, Context.ConnectionId, sourceId, targetId, diceCount);
 
         await Clients.All.SendAsync("CombatResult", result);
         await BroadcastState(state);
+        await Clients.All.SendAsync("CombatResolved");
     }
 
     public async Task RollDice(int diceCount)
@@ -131,9 +139,11 @@ public class GameHub : Hub
     public async Task Blitz(int sourceId, int targetId)
     {
         _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, true);
+        await Clients.All.SendAsync("CombatStarted");
         var (state, result) = _game.Blitz(Context.ConnectionId, sourceId, targetId);
         await Clients.All.SendAsync("BlitzResult", result);
         await BroadcastState(state);
+        await Clients.All.SendAsync("CombatResolved");
     }
 
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)

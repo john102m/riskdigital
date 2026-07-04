@@ -878,7 +878,53 @@ From zero to a fully playable, deployed digital board game:
 
 ---
 
-## 2026-06-30 Evening — Dice Physics, Sound, Panel Positioning, Board Camera Zoom
+## 2026-07-01 Evening — Relief Map, Attack Glow Rework, UI Overlay, Territory Names
+
+### Completed
+
+- **Normal map / relief board** — replaced flat sprite with 3D Quad + URP Lit material. Hand-painted greyscale height map (flood-fill in PaintShop Pro from board image), converted via normalmap.org (OpenGL Y+). Continents have visible depth under directional lighting.
+- **Attack glow rework** — removed emission-based colour change (confusing, lost player colour). Replaced with red/blue point lights (matching dice colours) + token scale pulse. Lights interact with normal map for convincing illumination.
+- **UI Overlay (`UIOverlay.cs`)** — builds Canvas from code at runtime:
+  - Info bar (bottom strip): coloured dot + player name + phase (left), game code (right)
+  - Activity feed (bottom-left, above info bar): 4 lines, auto-scroll, coalescing repeated placements
+  - Feed shows: reinforcements, fortify, card trades, eliminations (not combat — dice theatre handles that)
+  - Abbreviated territory names in feed (matching tv.html short names)
+- **Territory name labels** — full names rendered below each token on the board. Independent objects (not token children, won't pulse). Drop shadow for readability. Font/material copied from working army labels.
+- **SignalR events added** — `ArmiesPlaced`, `FortifyMoved`, `CardTraded`, `PlayerEliminated` handlers in `SignalRClient.cs` for activity feed.
+- **Board Final Vision doc** — `docs/unity/UNITY-BOARD-FINAL-VISION.md` defining the complete war-table aesthetic, camera behaviour, and minimal UI approach. Supersedes BOARD-LEVEL2-VISION.
+
+### Files Created
+
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\UIOverlay.cs` — info bar + activity feed
+- `docs/unity/UNITY-BOARD-FINAL-VISION.md` — complete board vision doc
+
+### Files Modified
+
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardRenderer.cs` — glow rework (point lights + pulse), territory name labels with drop shadow, removed emission
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\SignalRClient.cs` — added ArmiesPlaced, FortifyMoved, CardTraded, PlayerEliminated events
+
+### Design Decisions
+
+- Normal map works at any camera angle — 60° perspective can come later independently
+- Attack indication: steady red/blue point lights + token pulse (not colour change)
+- Activity feed excludes combat events (dice theatre is the visual storyteller for attacks)
+- Territory names as independent objects, not token children (avoids pulse scaling)
+- **Gotcha — TMP labels not rendering:** `TextMeshPro` components created at runtime don't render unless you explicitly copy `.font` and `.fontSharedMaterial` from an existing working TMP object. Unity doesn't auto-assign the default font asset to code-created TMP. Also, standalone labels must use rotation `(0,0,0)` to face a Z-axis camera — the token's `(90,0,0)` only works for labels parented to the rotated token.
+- Info bar at bottom, not top (less intrusive on the map view)
+- Combined army count + name on single label didn't work (pulse issue) — separate labels using copied TMP font/material
+
+### Next
+
+- Continue tuning name label positioning/sizing
+- Dice physics tuning in Inspector
+- Test full game on Unity board without HTML screen
+- Idle drift camera (when ready for Level 2)
+
+---
+
+*Updated: 2026-07-01 22:24*
+
+---
 
 ### Completed
 
@@ -928,3 +974,102 @@ From zero to a fully playable, deployed digital board game:
 ---
 
 *Updated: 2026-06-30 22:49*
+
+---
+
+## 2026-07-03 — Pre-Playtest Polish Session
+
+### Summary
+Major polish pass ahead of tomorrow's playtest. New map, soundtrack system, timing fixes, game start/end ceremony, dice input locking, welcome screen.
+
+### Completed
+
+**Graphics & Map**
+- New world map image with darker coastlines (designed for normal map use)
+- Normal map relief working well — continents raised, coastlines carved
+- Sea background reworked (flat gradient replaced due to banding)
+- Texture import settings: RGBA 32 bit, Non-Power of 2 for clean rendering
+
+**Soundtrack System**
+- `MusicManager.cs` — phase-based background music with crossfading
+- Array pools per phase (Inspector drag-and-drop) — random track selection for variety
+- Crossfade between phases (1.5s), loops indefinitely
+- Music stops on admin reset (null state handling)
+- `OnDestroy` stops audio when exiting play mode
+- Suno AI prompts for all 7 phase types documented in `docs/unity/SOUNDTRACK.md`
+
+**Timing & Camera Fixes**
+- Turn popup now waits for camera zoom-out before appearing (0.5s delay)
+- Blitz dice display reduced from 6s → 3.5s, now zooms out after
+- Single attack capture hide reduced from 4s → 2.5s
+- Alaska ↔ Kamchatka attacks skip map zoom (opposite sides of board)
+
+**Dice Input Lock (Option C — server + handset)**
+- Server rejects Attack/Blitz if `_pending != null` when Unity connected
+- Server broadcasts `CombatStarted` / `CombatResolved` events
+- Handset disables Attack/Blitz buttons between those events
+- "🎲 Dice rolling..." indicator shown on handset
+
+**Game Start Ceremony**
+- Welcome screen: centred panel with configurable text + optional sprite image
+- Welcome shows on: app start (no server), lobby, admin reset (null state)
+- Welcome hides on: any non-Lobby phase
+- `PlayerJoined` broadcast on create/join/addAI — shows in Unity activity feed
+- "Game On!" popup on Lobby → InitialPlacement transition
+- Tokens hidden until game starts (no grey cylinders in lobby)
+
+**Game End Ceremony**
+- Conquest win detection (all 42 territories) — triggers same win sequence as mission
+- `ShowConquestWin` — zoom out, clear arena, popup, victory sound
+- Slow camera drift after game over (`BoardCamera.StartDrift()`)
+- Drift stops on next zoom in or zoom out
+
+**Sound Tweaks**
+- Heavy reinforce sound: ominous clip when single placement count ≥ threshold
+- `heavyReinforceClip` and `heavyReinforceThreshold` exposed in Inspector
+
+### Files Created
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\MusicManager.cs`
+- `docs/unity/SOUNDTRACK.md`
+- `docs/GAME-NIGHT-HARDWARE.md`
+- `docs/HOME-SERVER.md`
+- `docs/proposals/MULTI-GAME-SERVER.md`
+- `docs/proposals/GAME-START-END-POLISH.md`
+- `docs/proposals/GAME-IDEAS.md`
+
+### Files Modified
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\UIOverlay.cs` — welcome screen, player join feed, Game On popup, conquest win, heavy reinforce sound, turn popup zoom fix
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` — blitz timing, capture timing, Alaska/Kamchatka zoom skip
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardCamera.cs` — drift system, drift stops on zoom
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardRenderer.cs` — tokens hidden in lobby, show on game start
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\SignalRClient.cs` — PlayerJoined event
+- `D:\Development\RiskDigital\server\Risk.Server\Hubs\GameHub.cs` — CombatStarted/Resolved, PlayerJoined broadcasts
+- `D:\Development\RiskDigital\server\Risk.Server\Services\GameService.Combat.cs` — dice lock (reject when pending)
+- `D:\Development\RiskDigital\handset\src\hooks\useConnection.ts` — combatInProgress state
+- `D:\Development\RiskDigital\handset\src\App.tsx` — pass combatInProgress to AttackScreen
+- `D:\Development\RiskDigital\handset\src\components\AttackScreen.tsx` — disable buttons during combat, dice rolling indicator
+
+### Design Decisions
+- Welcome screen reacts to current state (not transitions) — handles every arrival path
+- Null state = pre-lobby (no game exists). Welcome shows, feed clears, music stops.
+- Dice lock is server-authoritative (belt) + handset visual (braces)
+- Camera drift uses sine/cosine for organic slow movement post-game
+- MusicManager uses dual AudioSource crossfade pattern (A/B swap)
+- Heavy reinforce triggers on single placement `count`, not running total
+- Emojis removed from TMP popups (not supported without sprite assets)
+
+*Updated: 2026-07-03 21:57*
+
+### Known Issues (for next session)
+- 14 `alert()` calls in handset — ugly native browser popups for error handling. Proposal: `docs/proposals/REPLACE-ALERTS.md` (toast component).
+
+### Bug to Test: Elimination Mission Fallback
+- **Scenario:** Player has "Eliminate Blue" mission. Another bot eliminates Blue instead.
+- **Expected:** Mission falls back to world domination (`FallenBackToWorldDomination = true`). Player should get a notification/popup that their mission has changed.
+- **Current behaviour:** Unclear if fallback triggers correctly. No popup or `MissionUpdated` sent to the affected player when their target is eliminated by someone else.
+- **To fix:**
+  1. In `MoveAfterCapture` (server), when a player is eliminated, check if any OTHER player had an elimination mission targeting them.
+  2. If so, set `FallenBackToWorldDomination = true` on that mission and send `MissionUpdated` to that player.
+  3. Handset should show a brief notification: "Your target was eliminated — mission changed to world domination."
+- **To test:** Use debug mode — set up a 3-player game, give one player "Eliminate Blue", then have the other player kill Blue. Check if mission updates.
+- **Server code:** `GameService.Combat.cs` → `MoveAfterCapture` — the `FallenBackToWorldDomination` flag is already SET in the loop, but `MissionUpdated` is never sent to the affected player.

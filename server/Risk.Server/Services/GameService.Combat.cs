@@ -106,6 +106,9 @@ public partial class GameService
         if (!IsUnityTVConnected)
             return Attack(connectionId, sourceId, targetId, diceCount);
 
+        if (_pending != null)
+            throw new HubException("Combat in progress — wait for dice to resolve.");
+
         var source = _state!.Territories.First(t => t.Id == sourceId);
         var target = _state.Territories.First(t => t.Id == targetId);
         int defenderDiceCount = target.Armies >= 2 ? 2 : 1;
@@ -264,6 +267,9 @@ public partial class GameService
         var player = _state.Players[_state.CurrentPlayerIndex];
         if (player.ConnectionId != connectionId)
             throw new HubException("Not your turn.");
+
+        if (IsUnityTVConnected && _pending != null)
+            throw new HubException("Combat in progress — wait for dice to resolve.");
 
         var source = _state.Territories.FirstOrDefault(t => t.Id == sourceId);
         var target = _state.Territories.FirstOrDefault(t => t.Id == targetId);
