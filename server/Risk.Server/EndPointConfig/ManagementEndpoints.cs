@@ -31,12 +31,22 @@ public static class ManagementEndpoints
             return Results.Ok($"Sent {a ?? 3}a {d ?? 2}d");
         });
 
-        admin.MapGet("/gameover", (GameService game, IHubContext<GameHub> hub) =>
+        admin.MapGet("/gameover", async (GameService game, IHubContext<GameHub> hub) =>
         {
             if (game.State is null) return Results.BadRequest("No game");
             game.State.Phase = Risk.Server.Models.GamePhase.GameOver;
-            hub.Clients.All.SendAsync("GameStateUpdated", game.State);
-            return Results.Ok($"Game over — winner: {game.State.Players[game.State.CurrentPlayerIndex].Name}");
+            var winnerIndex = game.State.CurrentPlayerIndex;
+            var winner = game.State.Players[winnerIndex];
+
+            // Broadcast mission complete (triggers Unity win popup)
+            await hub.Clients.All.SendAsync("MissionComplete", winnerIndex, winner.Mission?.Description ?? "Debug game over");
+
+            // Reveal all missions
+            var missions = game.State.Players.Select(p => new { p.Name, p.Colour, Mission = p.Mission?.Description ?? "World domination" }).ToArray();
+            await hub.Clients.All.SendAsync("AllMissionsRevealed", missions);
+
+            await hub.Clients.All.SendAsync("GameStateUpdated", game.State);
+            return Results.Ok($"Game over — winner: {winner.Name}");
         });
 
         admin.MapGet("/missions", (GameService game) =>

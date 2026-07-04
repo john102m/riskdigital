@@ -148,7 +148,7 @@ public class GameHub : Hub
 
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
     {
-        var (state, forcedTrade, eliminatedIndex, missionWon) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
+        var (state, forcedTrade, eliminatedIndex, missionWon, fallbackPlayers) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
         await Clients.All.SendAsync("TroopsMovedIn", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (eliminatedIndex >= 0)
             await Clients.All.SendAsync("PlayerEliminated", eliminatedIndex, state.CurrentPlayerIndex);
@@ -156,6 +156,15 @@ public class GameHub : Hub
             await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
         if (forcedTrade)
             await Clients.Caller.SendAsync("ForcedTradeRequired", state.Players.First(p => p.ConnectionId == Context.ConnectionId).Cards);
+
+        // Notify players whose elimination mission fell back to world domination
+        foreach (var pi in fallbackPlayers)
+        {
+            var p = state.Players[pi];
+            if (!p.IsAI && p.ConnectionId is not null)
+                await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
+        }
+
         await BroadcastState(state);
     }
 
@@ -265,7 +274,12 @@ public class GameHub : Hub
     {
         await Clients.All.SendAsync("GameStateUpdated", state);
         if (state is GameState gs && gs.Phase == GamePhase.GameOver)
+        {
+            // Reveal all missions to all clients
+            var missions = gs.Players.Select(p => new { p.Name, p.Colour, Mission = p.Mission?.Description ?? "World domination" }).ToArray();
+            await Clients.All.SendAsync("AllMissionsRevealed", missions);
             _ = Task.Run(() => RetrainModels());
+        }
     }
 
     private void RetrainModels()

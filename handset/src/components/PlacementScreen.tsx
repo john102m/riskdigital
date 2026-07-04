@@ -10,9 +10,10 @@ interface Props {
   connection: HubConnection;
   gameState: GameState;
   playerName: string;
+  showToast: (msg: string) => void;
 }
 
-export function PlacementScreen({ connection, gameState, playerName }: Props) {
+export function PlacementScreen({ connection, gameState, playerName, showToast }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -34,7 +35,7 @@ export function PlacementScreen({ connection, gameState, playerName }: Props) {
     try {
       await connection.invoke("PlaceArmy", territoryId, count);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 

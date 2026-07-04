@@ -8,6 +8,7 @@ const AVATARS = ["female-1", "female-2", "female-3", "female-4", "female-5", "fe
 interface Props {
   connection: HubConnection;
   onJoined: (name: string) => void;
+  showToast?: (msg: string) => void;
 }
 
 interface LobbyStatus {

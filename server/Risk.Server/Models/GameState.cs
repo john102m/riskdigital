@@ -28,6 +28,7 @@ public class GameState
     public int? AttackFrontId { get; set; }
     public List<int> AttackFrontIds { get; set; } = [];
     public int LastDiceCount { get; set; }
+    public int TurnNumber { get; set; }
     public int? PendingMoveSource { get; set; }
     public int? PendingMoveTarget { get; set; }
     [JsonIgnore]
