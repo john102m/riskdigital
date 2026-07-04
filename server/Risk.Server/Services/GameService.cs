@@ -24,6 +24,7 @@ public partial class GameService
     public bool DebugMode { get; set; }
 
     private readonly TerritoryData _territoryData;
+    private readonly DiceAuditLogger? _diceAudit;
     private GameState? _state;
     private string? _unityTVConnectionId;
     private PendingCombat? _pending;
@@ -33,8 +34,9 @@ public partial class GameService
     public GameState? State => _state;
     public TerritoryData MapData => _territoryData;
 
-    public GameService()
+    public GameService(DiceAuditLogger? diceAudit = null)
     {
+        _diceAudit = diceAudit;
         var json = File.ReadAllText("Data/territories.json");
         _territoryData = JsonSerializer.Deserialize<TerritoryData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
@@ -55,6 +57,8 @@ public partial class GameService
 
     public void SubmitDiceResult(int[] attackerDice, int[] defenderDice)
     {
+        _diceAudit?.LogRolls("unity", "attacker", attackerDice);
+        _diceAudit?.LogRolls("unity", "defender", defenderDice);
         _pending?.SubmitDiceResult(attackerDice, defenderDice);
     }
 
@@ -230,11 +234,12 @@ public partial class GameService
 
     #region Private Helpers
 
-    private static int[] RollDice(int count)
+    private int[] RollDice(int count, string role = "attacker")
     {
         var dice = new int[count];
         for (int i = 0; i < count; i++)
             dice[i] = Random.Shared.Next(1, 7);
+        _diceAudit?.LogRolls("server", role, dice);
         return dice;
     }
 

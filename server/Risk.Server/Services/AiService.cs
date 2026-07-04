@@ -283,7 +283,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     int max = bestSource.Armies - 1;
                     if (max > 0)
                     {
-                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        var (_, _, _, missionWon, _) = game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        if (missionWon)
+                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -305,7 +307,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     int max = bestSource.Armies - 1;
                     if (max > 0)
                     {
-                        game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        var (_, _, _, missionWon2, _) = game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
+                        if (missionWon2)
+                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -367,7 +371,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     int max = source.Armies - 1;
                     if (max > 0)
                     {
-                        game.MoveAfterCapture(connId, source.Id, target.Id, max);
+                        var (_, _, _, missionWon3, _) = game.MoveAfterCapture(connId, source.Id, target.Id, max);
+                        if (missionWon3)
+                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -388,7 +394,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     int max = source.Armies - 1;
                     if (max > 0)
                     {
-                        game.MoveAfterCapture(connId, source.Id, target.Id, max);
+                        var (_, _, _, missionWon4, _) = game.MoveAfterCapture(connId, source.Id, target.Id, max);
+                        if (missionWon4)
+                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -440,7 +448,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             int max = source.Armies - 1;
             if (min > 0 && max > 0)
             {
-                game.MoveAfterCapture(connId, source.Id, target.Id, min);
+                var (_, _, _, missionWon5, _) = game.MoveAfterCapture(connId, source.Id, target.Id, min);
+                if (missionWon5)
+                    await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                 await Broadcast();
             }
             if (state.Phase == GamePhase.GameOver) return false;

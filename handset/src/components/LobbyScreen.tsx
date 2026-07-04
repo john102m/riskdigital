@@ -9,9 +9,10 @@ interface Props {
   connection: HubConnection;
   gameState: GameState;
   playerName: string;
+  showToast: (msg: string) => void;
 }
 
-export function LobbyScreen({ connection, gameState, playerName }: Props) {
+export function LobbyScreen({ connection, gameState, playerName, showToast }: Props) {
   const isHost = gameState.players.find((p) => p.name === playerName)?.isHost;
   const [showT5, setShowT5] = useState(false);
 
@@ -19,7 +20,7 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     try {
       await connection.invoke("StartGame");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -28,7 +29,7 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
       await connection.invoke("AddAI", tier, personality ?? null);
       setShowT5(false);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -36,76 +37,80 @@ export function LobbyScreen({ connection, gameState, playerName }: Props) {
     try {
       await connection.invoke("RemoveAI", index);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 pt-6">
-      <p className="text-gray-500 text-xs uppercase tracking-wider">Game Code</p>
-      <p className="text-2xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
-
-      <div className="mt-3 w-full max-w-xs">
-        <ul className="space-y-1.5">
-          {gameState.players.map((p, i) => (
-            <li key={p.name} className="flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2">
-              <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
-              <span className="font-medium">{p.name}</span>
-              {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
-              {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖 Tier-{p.aiTier}</span>}
-              {p.isAI && isHost && (
-                <button onClick={() => removeAI(i)} className="ml-auto text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-red-900/30">✕</button>
-              )}
-            </li>
-          ))}
-        </ul>
+    <div className="h-dvh bg-gray-900 text-white flex flex-col p-4 pt-3">
+      {/* Header — game code */}
+      <div className="text-center shrink-0">
+        <p className="text-2xl font-bold tracking-[0.3em] text-amber-400">{gameState.gameCode}</p>
       </div>
 
-      <p className="mt-4 text-sm text-gray-500">
-        {gameState.players.length < 2
-          ? "Waiting for 1 more player..."
-          : `${gameState.players.length} players — ready to conquer 🌍`}
-      </p>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto mt-3">
+        <div className="w-full max-w-xs mx-auto">
+          <ul className="space-y-1.5">
+            {gameState.players.map((p, i) => (
+              <li key={p.name} className="flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2">
+                <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
+                <span className="font-medium">{p.name}</span>
+                {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
+                {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖 T{p.aiTier}</span>}
+                {p.isAI && isHost && (
+                  <button onClick={() => removeAI(i)} className="ml-auto text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-red-900/30">✕</button>
+                )}
+              </li>
+            ))}
+          </ul>
 
-      {isHost && (
-        <div className="mt-4 flex flex-col gap-3 items-center">
-          {gameState.players.length < 6 && (
-            <div className="flex flex-col gap-2 w-full max-w-xs">
+          <p className="mt-3 text-sm text-gray-500 text-center">
+            {gameState.players.length < 2
+              ? "Waiting for 1 more player..."
+              : `${gameState.players.length} players — ready to conquer 🌍`}
+          </p>
+
+          {/* AI tier buttons */}
+          {isHost && gameState.players.length < 6 && (
+            <div className="flex flex-col gap-2 mt-3">
               <div className="flex gap-2">
-                <button onClick={() => addAI(1)} className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                  🤖 Tier-1
+                <button onClick={() => addAI(1)} className="flex-1 bg-blue-600 active:bg-blue-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  🤖 T1
                 </button>
-                <button onClick={() => addAI(2)} className="flex-1 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                  ⚔️ Tier-2
+                <button onClick={() => addAI(2)} className="flex-1 bg-purple-600 active:bg-purple-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  ⚔️ T2
                 </button>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => addAI(3)} className="flex-1 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                  🧠 Tier-3
+                <button onClick={() => addAI(3)} className="flex-1 bg-green-600 active:bg-green-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  🧠 T3
                 </button>
-                <button onClick={() => addAI(4)} className="flex-1 bg-amber-600 hover:bg-amber-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                  🦊 Tier-4
+                <button onClick={() => addAI(4)} className="flex-1 bg-amber-600 active:bg-amber-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  🦊 T4
                 </button>
-                <button onClick={() => setShowT5(!showT5)} className="flex-1 bg-rose-600 hover:bg-rose-700 px-4 py-2 rounded-lg font-bold text-sm transition">
-                  🧬 Tier-5
+                <button onClick={() => setShowT5(!showT5)} className="flex-1 bg-rose-600 active:bg-rose-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  🧬 T5
                 </button>
               </div>
               {showT5 && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => addAI(5, "Opportunist")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🦊 Opportunist</button>
-                  <button onClick={() => addAI(5, "Cautious")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🛡️ Cautious</button>
-                  <button onClick={() => addAI(5, "Aggressive")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🔥 Aggressive</button>
-                  <button onClick={() => addAI(5, "Continental")} className="bg-rose-700 hover:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold transition">🗺️ Continental</button>
-                  <button onClick={() => addAI(5)} className="col-span-2 bg-rose-900 hover:bg-rose-950 px-3 py-2 rounded-lg text-xs font-bold transition">🎲 Mystery</button>
+                  <button onClick={() => addAI(5, "Opportunist")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🦊 Opportunist</button>
+                  <button onClick={() => addAI(5, "Cautious")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🛡️ Cautious</button>
+                  <button onClick={() => addAI(5, "Aggressive")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🔥 Aggressive</button>
+                  <button onClick={() => addAI(5, "Continental")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🗺️ Continental</button>
+                  <button onClick={() => addAI(5)} className="col-span-2 bg-rose-900 active:bg-rose-950 px-3 py-2 rounded-lg text-xs font-bold">🎲 Mystery</button>
                 </div>
               )}
             </div>
           )}
+        </div>
+      </div>
 
-            <button onClick={startGame} className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg text-xl font-bold transition">
-              Start Game
-            </button>
-
+      {/* Pinned start button */}
+      {isHost && (
+        <div className="shrink-0 pt-3">
+          <button onClick={startGame} className="w-full bg-green-600 active:bg-green-700 px-6 py-3 rounded-lg text-xl font-bold">
+            Start Game
+          </button>
         </div>
       )}
     </div>

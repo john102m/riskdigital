@@ -4,7 +4,7 @@ import { Card, GameState, CombatResult, BlitzResult, RollPrompt } from "../types
 import { groupByContinent } from "../utils/groupByContinent";
 import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
-import { CardTradePanel } from "./CardTradePanel";
+import { CardTradeOverlay } from "./CardTradeOverlay";
 import { CardBadge } from "./CardBadge";
 
 interface Props {
@@ -17,9 +17,10 @@ interface Props {
   rollPrompt: RollPrompt | null;
   clearRollPrompt: () => void;
   combatInProgress: boolean;
+  showToast: (msg: string) => void;
 }
 
-export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress }: Props) {
+export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress, showToast }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -35,6 +36,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   const [expanded, setExpanded] = useState<string | null>("__init__");
   const [idleHint, setIdleHint] = useState<string | null>(null);
   const [hasAttacked, setHasAttacked] = useState(false);
+  const [confirmSkip, setConfirmSkip] = useState(false);
 
   // Vibrate when this player is asked to defend
   useEffect(() => {
@@ -116,7 +118,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       navigator.vibrate?.([50, 30, 50]);
       await connection.invoke("Attack", sourceId, targetId, effectiveDice);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -126,7 +128,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       await connection.invoke("RollDice", count ?? rollPrompt?.diceCount ?? 1);
       clearRollPrompt();
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -135,7 +137,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     try {
       await connection.invoke("Blitz", sourceId, targetId);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -154,7 +156,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       const strongest = remaining.sort((a, b) => b.armies - a.armies)[0];
       setExpanded(strongest?.continent ?? "__init__");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -162,18 +164,21 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     try {
       await connection.invoke("EndAttack");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
   // Forced trade modal (after elimination)
   if (forcedTrade && cards.length >= 5) {
     return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-amber-400">Captured cards — must trade!</p>
-        <p className="text-sm text-gray-400">You have {cards.length} cards. Trade until under 5.</p>
-        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => { if (cards.length - 3 < 5) clearForcedTrade(); }} />
-      </div>
+      <CardTradeOverlay
+        connection={connection}
+        cards={cards}
+        gameState={gameState}
+        forced={true}
+        forcedLabel={`Captured cards — must trade! (${cards.length} held)`}
+        onClose={clearForcedTrade}
+      />
     );
   }
 
@@ -332,9 +337,16 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
         </div>
       )}
 
-      <button onClick={() => { if (!hasAttacked && !confirm("Skip attack phase?")) return; endAttack(); }} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
-        Done → Fortify
-      </button>
+      {confirmSkip ? (
+        <div className="mt-auto flex gap-2">
+          <button onClick={() => setConfirmSkip(false)} className="flex-1 bg-gray-700 active:bg-gray-600 px-4 py-3 rounded-lg text-lg font-bold">Cancel</button>
+          <button onClick={endAttack} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-3 rounded-lg text-lg font-bold">Skip Attack</button>
+        </div>
+      ) : (
+        <button onClick={() => { if (!hasAttacked) { setConfirmSkip(true); return; } endAttack(); }} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
+          Done → Fortify
+        </button>
+      )}
     </div>
   );
 }

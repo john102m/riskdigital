@@ -17,6 +17,7 @@ builder.Services.AddSingleton<GameService>();
 builder.Services.AddSingleton<AiService>();
 builder.Services.AddSingleton<MlModels>();
 builder.Services.AddSingleton<ActionLogger>();
+builder.Services.AddSingleton<DiceAuditLogger>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>

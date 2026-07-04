@@ -4,20 +4,18 @@ import { Card, GameState } from "../types/game";
 import { groupByContinent } from "../utils/groupByContinent";
 import { shortName } from "../utils/shortName";
 import { ContinentAccordion } from "./ContinentAccordion";
-import { CardTradePanel } from "./CardTradePanel";
+import { CardTradeOverlay } from "./CardTradeOverlay";
 import { CardBadge } from "./CardBadge";
 import { heavyTap } from "../utils/vibrate";
 
 function hasTradeableSet(cards: Card[]): boolean {
   if (cards.length < 3) return false;
   const wilds = cards.filter(c => c.type === "Wild").length;
-  if (wilds >= 2) return true; // 2 wilds + anything
+  if (wilds >= 2) return true;
   const types = cards.filter(c => c.type !== "Wild").map(c => c.type);
-  // All same
   for (const t of ["Infantry", "Cavalry", "Artillery"]) {
     if (types.filter(x => x === t).length + wilds >= 3) return true;
   }
-  // All different
   const unique = new Set(types);
   if (unique.size >= 3) return true;
   if (unique.size >= 2 && wilds >= 1) return true;
@@ -29,21 +27,28 @@ interface Props {
   gameState: GameState;
   playerName: string;
   cards: Card[];
+  showToast: (msg: string) => void;
 }
 
-export function ReinforceScreen({ connection, gameState, playerName, cards }: Props) {
+export function ReinforceScreen({ connection, gameState, playerName, cards, showToast }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const myTerritories = gameState.territories.filter((t) => t.ownerId === myIndex);
 
-  const [showCards, setShowCards] = useState(cards.length >= 5);
+  const [showCards, setShowCards] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(() => groupByContinent(myTerritories)[0]?.continent ?? null);
   const [tradeHint, setTradeHint] = useState(false);
 
   const mustTrade = isMyTurn && cards.length >= 5;
 
+  // Auto-open overlay when must trade
+  useEffect(() => {
+    if (mustTrade) setShowCards(true);
+  }, [mustTrade]);
+
+  // Show tradeable hint
   useEffect(() => {
     if (isMyTurn && !mustTrade && hasTradeableSet(cards)) {
       setTradeHint(true);
@@ -70,7 +75,7 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     try {
       await connection.invoke("Reinforce", territoryId, count);
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -78,18 +83,9 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
     try {
       await connection.invoke("EndReinforce");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
-
-  if (mustTrade) {
-    return (
-      <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4 gap-4">
-        <p className="text-lg font-bold text-amber-400">Trade cards first ({cards.length} held)</p>
-        <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => setShowCards(false)} />
-      </div>
-    );
-  }
 
   return (
     <div className="h-dvh bg-gray-900 text-white flex flex-col px-4 pt-2 pb-4">
@@ -98,22 +94,17 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
           Reinforce · {me.reinforcementsRemaining}
         </span>
         {cards.length > 0 && (
-          <button onClick={() => { setShowCards(!showCards); if (!showCards) setExpanded(null); }} className="min-h-[32px] px-3 flex items-center justify-center rounded-full bg-gray-700 text-sm">
+          <button onClick={() => setShowCards(true)} className="min-h-[32px] px-3 flex items-center justify-center rounded-full bg-gray-700 text-sm">
             🃏 {cards.length}
           </button>
         )}
       </div>
 
-      {/* Card trade panel */}
+      {/* Tradeable set hint */}
       {tradeHint && !showCards && (
-        <button onClick={() => { setShowCards(true); setExpanded(null); setTradeHint(false); }} className="mb-2 px-3 py-2 bg-amber-800/60 border border-amber-500/50 rounded text-sm text-amber-300 text-center animate-pulse">
+        <button onClick={() => { setShowCards(true); setTradeHint(false); }} className="mb-2 px-3 py-2 bg-amber-800/60 border border-amber-500/50 rounded text-sm text-amber-300 text-center animate-pulse">
           🃏 You have a tradeable set — tap to open cards
         </button>
-      )}
-      {showCards && (
-        <div className="mb-3">
-          <CardTradePanel connection={connection} cards={cards} gameState={gameState} onTraded={() => setShowCards(false)} />
-        </div>
       )}
 
       {/* Territory grid */}
@@ -157,6 +148,18 @@ export function ReinforceScreen({ connection, gameState, playerName, cards }: Pr
         <button onClick={endReinforce} className="mt-2 bg-green-600 active:bg-green-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
           Done → Attack
         </button>
+      )}
+
+      {/* Full-screen card trade overlay */}
+      {showCards && (
+        <CardTradeOverlay
+          connection={connection}
+          cards={cards}
+          gameState={gameState}
+          forced={mustTrade}
+          forcedLabel={mustTrade ? `Must trade! (${cards.length} cards held)` : undefined}
+          onClose={() => setShowCards(false)}
+        />
       )}
     </div>
   );

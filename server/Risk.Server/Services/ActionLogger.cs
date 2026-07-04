@@ -53,7 +53,7 @@ public class ActionLogger
         var continent = GetContinentFor(state, territoryId);
         float continentProgress = continent.total > 0 ? (float)continent.owned / continent.total : 0;
 
-        var line = $"{state.GameCode},{playerIndex},{territoryId},{t.Armies},{(isBorder ? 1 : 0)},{enemyThreat},{continentProgress:F2},{continent.bonus},{player.ReinforcementsRemaining},{state.CardTradeCount}";
+        var line = $"{state.GameCode},{playerIndex},{territoryId},{t.Armies},{(isBorder ? 1 : 0)},{enemyThreat},{continentProgress:F2},{continent.bonus},{player.ReinforcementsRemaining},{state.TurnNumber}";
         Append("reinforce-log.csv", line, "GameId,PlayerIndex,TerritoryId,TerritoryArmies,IsBorder,EnemyThreat,ContinentProgress,ContinentBonus,TotalReinforcements,TurnNumber");
     }
 
@@ -69,7 +69,7 @@ public class ActionLogger
         var theirCont = GetContinentFor(state, targetId, target.OwnerId);
         bool wouldComplete = myCont.owned == myCont.total - 1;
 
-        var line = $"{state.GameCode},{playerIndex},{source.Armies},{target.Armies},{targetOwnerTerritoryCount},{theirCont.owned}/{theirCont.total},{myCont.owned}/{myCont.total},{(usedBlitz ? 1 : 0)},{(wouldComplete ? 1 : 0)},{state.CardTradeCount},1";
+        var line = $"{state.GameCode},{playerIndex},{source.Armies},{target.Armies},{targetOwnerTerritoryCount},{theirCont.owned}/{theirCont.total},{myCont.owned}/{myCont.total},{(usedBlitz ? 1 : 0)},{(wouldComplete ? 1 : 0)},{state.TurnNumber},1";
         Append("attack-log.csv", line, "GameId,PlayerIndex,SourceArmies,TargetArmies,TargetOwnerTerritoryCount,TargetContinentProgress,MyContinentProgress,UsedBlitz,WouldCompleteCont,TurnNumber,DidAttack");
     }
 

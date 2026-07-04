@@ -10,12 +10,15 @@ import { GameOverScreen } from "./components/GameOverScreen";
 import { MissionBadge } from "./components/MissionBadge";
 import { MissionWelcome } from "./components/MissionWelcome";
 import { StatusBadge } from "./components/StatusBadge";
+import { Toast } from "./components/Toast";
 
 export default function App() {
-  const { connection, gameState, cards, mission, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress } = useConnection();
+  const { connection, gameState, cards, mission, missionToast, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
   const [showMissionWelcome, setShowMissionWelcome] = useState(false);
   const [lastTurnIndex, setLastTurnIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => setToast(msg);
 
   useEffect(() => {
     if (mission) setShowMissionWelcome(true);
@@ -45,33 +48,40 @@ export default function App() {
   const inGame = gameState?.players.some((p) => p.name === playerName);
 
   if (!gameState || !inGame) {
-    return <ConnectScreen connection={connection} onJoined={setPlayerName} />;
+    return <>{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}<ConnectScreen connection={connection} onJoined={setPlayerName} showToast={showToast} /></>;
   }
 
   if (gameState.phase === "Lobby") {
-    return <LobbyScreen connection={connection} gameState={gameState} playerName={playerName} />;
+    return <>{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}<LobbyScreen connection={connection} gameState={gameState} playerName={playerName} showToast={showToast} /></>;
   }
 
   if (gameState.phase === "InitialPlacement") {
     return <>
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
       <MissionBadge mission={mission} />
       <StatusBadge mission={mission} gameState={gameState} playerName={playerName} />
       {showMissionWelcome && mission && <MissionWelcome mission={mission} onDismiss={() => setShowMissionWelcome(false)} />}
-      <PlacementScreen connection={connection} gameState={gameState} playerName={playerName} />
+      <PlacementScreen connection={connection} gameState={gameState} playerName={playerName} showToast={showToast} />
     </>;
   }
 
   if (gameState.phase === "Playing") {
+    const missionToastEl = missionToast ? (
+      <div className="fixed top-4 left-4 right-4 bg-amber-900/90 text-amber-200 px-4 py-3 rounded-lg text-sm font-medium text-center z-50 animate-pulse">
+        {missionToast}
+      </div>
+    ) : null;
+
     if (gameState.turnPhase === "Reinforce") {
-      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} /></>;
+      return <>{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}{missionToastEl}<MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><ReinforceScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} showToast={showToast} /></>;
     }
 
     if (gameState.turnPhase === "Attack") {
-      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} rollPrompt={rollPrompt} clearRollPrompt={clearRollPrompt} combatInProgress={combatInProgress} /></>;
+      return <>{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}{missionToastEl}<MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><AttackScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} forcedTrade={forcedTrade} clearForcedTrade={clearForcedTrade} rollPrompt={rollPrompt} clearRollPrompt={clearRollPrompt} combatInProgress={combatInProgress} showToast={showToast} /></>;
     }
 
     if (gameState.turnPhase === "Fortify") {
-      return <><MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><FortifyScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} /></>;
+      return <>{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}{missionToastEl}<MissionBadge mission={mission} /><StatusBadge mission={mission} gameState={gameState} playerName={playerName} /><FortifyScreen connection={connection} gameState={gameState} playerName={playerName} cards={cards} showToast={showToast} /></>;
     }
 
     return (

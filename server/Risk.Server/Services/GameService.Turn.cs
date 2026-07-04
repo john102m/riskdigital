@@ -150,6 +150,8 @@ public partial class GameService
 
         player.EarnedCardThisTurn = false;
 
+        _state.TurnNumber++;
+
         do
         {
             _state.CurrentPlayerIndex = (_state.CurrentPlayerIndex + 1) % _state.Players.Count;

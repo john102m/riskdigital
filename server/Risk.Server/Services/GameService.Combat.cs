@@ -63,9 +63,9 @@ public partial class GameService
             throw new HubException("Not enough armies to attack with that many dice.");
 
         _state.LastDiceCount = diceCount;
-        var attackerDice = RollDice(diceCount).OrderByDescending(d => d).ToArray();
+        var attackerDice = RollDice(diceCount, "attacker").OrderByDescending(d => d).ToArray();
         int defenderDiceCount = target.Armies >= 2 ? 2 : 1;
-        var defenderDice = RollDice(defenderDiceCount).OrderByDescending(d => d).ToArray();
+        var defenderDice = RollDice(defenderDiceCount, "defender").OrderByDescending(d => d).ToArray();
 
         int attackerLosses = 0, defenderLosses = 0;
         int comparisons = Math.Min(attackerDice.Length, defenderDice.Length);
@@ -299,9 +299,9 @@ public partial class GameService
         while (source.Armies > 1 && target.Armies > 0)
         {
             lastDice = Math.Min(3, source.Armies - 1);
-            var attackerDice = RollDice(lastDice).OrderByDescending(d => d).ToArray();
+            var attackerDice = RollDice(lastDice, "attacker").OrderByDescending(d => d).ToArray();
             int defDice = target.Armies >= 2 ? 2 : 1;
-            var defenderDice = RollDice(defDice).OrderByDescending(d => d).ToArray();
+            var defenderDice = RollDice(defDice, "defender").OrderByDescending(d => d).ToArray();
 
             finalAttackerDice = attackerDice;
             finalDefenderDice = defenderDice;
@@ -333,7 +333,7 @@ public partial class GameService
         return (_state, new BlitzResult(rounds, startSourceArmies - source.Armies, startTargetArmies - target.Armies, captured, sourceId, targetId, source.Armies, target.Armies, finalAttackerDice, finalDefenderDice));
     }
 
-    public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex, bool MissionWon) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
+    public (GameState State, bool ForcedTradeRequired, int EliminatedPlayerIndex, bool MissionWon, List<int> MissionFallbackPlayers) MoveAfterCapture(string connectionId, int sourceId, int targetId, int armies)
     {
         if (_state is null || _state.Phase != GamePhase.Playing || _state.TurnPhase != TurnPhase.Attack)
             throw new HubException("Not in attack phase.");
@@ -358,6 +358,7 @@ public partial class GameService
         _state.PendingMoveTarget = null;
 
         int defenderId = -1;
+        var fallbackPlayers = new List<int>();
         for (int i = 0; i < _state.Players.Count; i++)
         {
             if (i != _state.CurrentPlayerIndex && !_state.Players[i].IsEliminated
@@ -375,7 +376,10 @@ public partial class GameService
                         if (p == _state.CurrentPlayerIndex) continue;
                         var m = _state.Players[p].Mission;
                         if (m is { Type: MissionType.Elimination } && m.TargetPlayerIndex == i)
+                        {
                             m.FallenBackToWorldDomination = true;
+                            fallbackPlayers.Add(p);
+                        }
                     }
                 }
             }
@@ -393,6 +397,6 @@ public partial class GameService
         }
 
         bool forcedTrade = player.Cards.Count >= 5;
-        return (_state, forcedTrade, defenderId, missionWon);
+        return (_state, forcedTrade, defenderId, missionWon, fallbackPlayers);
     }
 }

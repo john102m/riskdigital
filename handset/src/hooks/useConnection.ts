@@ -13,6 +13,7 @@ export function useConnection() {
   const [cards, setCards] = useState<Card[]>([]);
   const [forcedTrade, setForcedTrade] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
+  const [missionToast, setMissionToast] = useState<string | null>(null);
   const [rollPrompt, setRollPrompt] = useState<RollPrompt | null>(null);
   const [combatInProgress, setCombatInProgress] = useState(false);
 
@@ -27,7 +28,14 @@ export function useConnection() {
       if (state?.phase === "Lobby") { setCards([]); setMission(null); setForcedTrade(false); }
     });
     conn.on("CardsUpdated", (hand: Card[]) => setCards(hand));
-    conn.on("MissionUpdated", (m: Mission) => setMission(m));
+    conn.on("MissionUpdated", (m: Mission) => {
+      if (m.fallenBackToWorldDomination && !mission) {
+        // First time receiving fallback — show toast
+        setMissionToast("Your target was eliminated — mission is now world domination");
+        setTimeout(() => setMissionToast(null), 5000);
+      }
+      setMission(m);
+    });
     conn.on("ForcedTradeRequired", (hand: Card[]) => {
       setCards(hand);
       setForcedTrade(true);
@@ -73,5 +81,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null), combatInProgress };
+  return { connection, gameState, cards, mission, missionToast, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null), combatInProgress };
 }

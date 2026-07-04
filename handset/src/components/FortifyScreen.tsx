@@ -11,9 +11,10 @@ interface Props {
   gameState: GameState;
   playerName: string;
   cards: Card[];
+  showToast: (msg: string) => void;
 }
 
-export function FortifyScreen({ connection, gameState, playerName, cards }: Props) {
+export function FortifyScreen({ connection, gameState, playerName, cards, showToast }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -53,7 +54,7 @@ export function FortifyScreen({ connection, gameState, playerName, cards }: Prop
       await connection.invoke("Fortify", sourceId, targetId, armies);
       await connection.invoke("EndTurn");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
@@ -61,7 +62,7 @@ export function FortifyScreen({ connection, gameState, playerName, cards }: Prop
     try {
       await connection.invoke("EndTurn");
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message);
     }
   };
 
