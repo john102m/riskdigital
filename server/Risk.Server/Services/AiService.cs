@@ -110,8 +110,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay(2000, 3000);
             var set = FindValidSet(player.Cards);
             if (set is null) break;
-            game.TradeCards(connId, set);
-            await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, 0);
+            var (_, armies, _) = game.TradeCards(connId, set);
+            await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
             await Broadcast();
         }
 
@@ -123,8 +123,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             if (set is not null && (w.CardHoarding < 0.3f || (w.CardHoarding < 0.7f && player.Cards.Count >= 4) || HasTerritoryBonusSet(state, player)))
             {
                 await Delay((int)(2000 * w.TimingMultiplier), (int)(2500 * w.TimingMultiplier));
-                game.TradeCards(connId, set);
-                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, 0);
+                var (_, armies, _) = game.TradeCards(connId, set);
+                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
                 await Broadcast();
             }
         }
@@ -136,8 +136,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             if (set is not null && (player.AiTier < 3 || player.Cards.Count >= 4 || HasTerritoryBonusSet(state, player)))
             {
                 await Delay(2000, 2500);
-                game.TradeCards(connId, set);
-                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, 0);
+                var (_, armies, _) = game.TradeCards(connId, set);
+                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
                 await Broadcast();
             }
         }
@@ -288,6 +288,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     }
                     if (state.Phase == GamePhase.GameOver) return;
                 }
+
+                await Delay(2500, 3500); // let blitz display clear on Unity board
             }
             else
             {
@@ -370,6 +372,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     }
                     if (state.Phase == GamePhase.GameOver) return;
                 }
+
+                await Delay(2500, 3500); // let blitz display clear on Unity board
             }
             else
             {
@@ -647,6 +651,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     }
                     if (state.Phase == GamePhase.GameOver) return;
                 }
+
+                await Delay(2500, 3500); // let blitz display clear on Unity board
             }
             else
             {

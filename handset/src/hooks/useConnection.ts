@@ -14,6 +14,7 @@ export function useConnection() {
   const [forcedTrade, setForcedTrade] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
   const [rollPrompt, setRollPrompt] = useState<RollPrompt | null>(null);
+  const [combatInProgress, setCombatInProgress] = useState(false);
 
   useEffect(() => {
     const conn = new signalR.HubConnectionBuilder()
@@ -34,6 +35,8 @@ export function useConnection() {
     conn.on("RollPrompt", (prompt: RollPrompt) => { setRollPrompt(prompt); });
     conn.on("CombatResult", () => setRollPrompt(null));
     conn.on("BlitzResult", () => setRollPrompt(null));
+    conn.on("CombatStarted", () => setCombatInProgress(true));
+    conn.on("CombatResolved", () => setCombatInProgress(false));
 
     conn.onreconnected(() => {
       const name = localStorage.getItem("risk_name");
@@ -70,5 +73,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null) };
+  return { connection, gameState, cards, mission, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null), combatInProgress };
 }

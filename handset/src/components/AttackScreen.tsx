@@ -16,9 +16,10 @@ interface Props {
   clearForcedTrade: () => void;
   rollPrompt: RollPrompt | null;
   clearRollPrompt: () => void;
+  combatInProgress: boolean;
 }
 
-export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt }: Props) {
+export function AttackScreen({ connection, gameState, playerName, cards, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress }: Props) {
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
@@ -33,6 +34,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
   const [blitzSummary, setBlitzSummary] = useState<{ rounds: number; atkLoss: number; defLoss: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>("__init__");
   const [idleHint, setIdleHint] = useState<string | null>(null);
+  const [hasAttacked, setHasAttacked] = useState(false);
 
   // Vibrate when this player is asked to defend
   useEffect(() => {
@@ -59,6 +61,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     const handler = (result: CombatResult) => {
       setLastResult(result);
       setBlitzSummary(null);
+      setHasAttacked(true);
       if (result.captured && isMyTurn) {
         setAwaitingMove(true);
         setMoveArmies(result.attackerDice.length);
@@ -66,6 +69,7 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
     };
     const blitzHandler = (result: BlitzResult) => {
       setLastResult({ attackerDice: [], defenderDice: [], attackerLosses: result.totalAttackerLosses, defenderLosses: result.totalDefenderLosses, captured: result.captured, sourceId: result.sourceId, targetId: result.targetId, sourceArmies: result.sourceArmies, targetArmies: result.targetArmies } as CombatResult);
+      setHasAttacked(true);
       if (result.captured && isMyTurn) {
         setAwaitingMove(true);
         setMoveArmies(Math.min(3, result.sourceArmies - 1) || 1);
@@ -308,10 +312,10 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
       {sourceId !== null && targetId !== null && (
         <div className="mb-3 flex flex-col gap-2">
           <div className="flex gap-2">
-            <button onClick={attack} disabled={maxDice < 1} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
+            <button onClick={attack} disabled={maxDice < 1 || combatInProgress} className="flex-1 bg-red-600 active:bg-red-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
               ⚔️ {effectiveDice}🎲
             </button>
-            <button onClick={blitz} disabled={maxDice < 1} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
+            <button onClick={blitz} disabled={maxDice < 1 || combatInProgress} className="flex-1 bg-purple-600 active:bg-purple-700 px-4 py-3 rounded-lg font-bold disabled:opacity-30">
               ⚡ Blitz
             </button>
           </div>
@@ -322,10 +326,13 @@ export function AttackScreen({ connection, gameState, playerName, cards, forcedT
               </button>
             ))}
           </div>
+          {combatInProgress && (
+            <p className="text-center text-xs text-amber-400/70 animate-pulse">🎲 Dice rolling...</p>
+          )}
         </div>
       )}
 
-      <button onClick={endAttack} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
+      <button onClick={() => { if (!hasAttacked && !confirm("Skip attack phase?")) return; endAttack(); }} className="mt-auto bg-amber-600 active:bg-amber-700 px-6 py-3 rounded-lg text-lg font-bold w-full">
         Done → Fortify
       </button>
     </div>
