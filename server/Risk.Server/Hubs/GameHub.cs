@@ -6,16 +6,16 @@ namespace Risk.Server.Hubs;
 
 public class GameHub : Hub
 {
-    private readonly GameService _game;
+    private readonly GameManager _manager;
     private readonly AiService _ai;
     private readonly ActionLogger _log;
     private readonly MlModels _ml;
     private readonly ILogger<GameHub> _logger;
     private readonly IHubContext<GameHub> _hubContext;
 
-    public GameHub(GameService game, AiService ai, ActionLogger log, MlModels ml, ILogger<GameHub> logger, IHubContext<GameHub> hubContext)
+    public GameHub(GameManager manager, AiService ai, ActionLogger log, MlModels ml, ILogger<GameHub> logger, IHubContext<GameHub> hubContext)
     {
-        _game = game;
+        _manager = manager;
         _ai = ai;
         _log = log;
         _ml = ml;
@@ -23,147 +23,220 @@ public class GameHub : Hub
         _hubContext = hubContext;
     }
 
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    private (GameService Game, string GameCode) GetCallerGame()
+    {
+        var code = _manager.GetGameCode(Context.ConnectionId);
+        if (code is null) throw new HubException("Not in a game.");
+        var game = _manager.GetGame(code);
+        if (game is null) throw new HubException("Game not found.");
+        return (game, code);
+    }
+
+    private IClientProxy GameGroup(string gameCode) => Clients.Group(gameCode);
+
+    private async Task BroadcastState(GameState state, string gameCode)
+    {
+        _logger.LogInformation("BroadcastState: code={Code} phase={Phase}", gameCode, state.Phase);
+        await GameGroup(gameCode).SendAsync("GameStateUpdated", state);
+        if (state.Phase == GamePhase.GameOver)
+        {
+            _logger.LogInformation("GameOver broadcast to group {Code}", gameCode);
+            var missions = state.Players.Select(p => new { p.Name, p.Colour, Mission = p.Mission?.Description ?? "World domination" }).ToArray();
+            await GameGroup(gameCode).SendAsync("AllMissionsRevealed", missions);
+            _ = Task.Run(() => RetrainModels());
+        }
+    }
+
+    private async Task BroadcastLobbyStatus(string gameCode, GameService game)
+    {
+        var status = game.GetLobbyStatus();
+        await GameGroup(gameCode).SendAsync("LobbyStatus", status);
+    }
+
+    // ─── Lobby ───────────────────────────────────────────────────────────────
+
     public async Task GetLobbyStatus()
     {
-        var status = _game.GetLobbyStatus();
-        await Clients.Caller.SendAsync("LobbyStatus", status);
+        // If caller is in a game, return that game's status
+        var code = _manager.GetGameCode(Context.ConnectionId);
+        if (code is not null)
+        {
+            var game = _manager.GetGame(code);
+            if (game is not null)
+            {
+                await Clients.Caller.SendAsync("LobbyStatus", game.GetLobbyStatus());
+                return;
+            }
+        }
+        // Not in a game — return no-game status
+        await Clients.Caller.SendAsync("LobbyStatus", new { gameExists = false });
     }
 
     public async Task CreateGame(string playerName, int colourIndex = 0, int avatarIndex = 0)
     {
-        var state = _game.CreateGame(playerName, Context.ConnectionId, colourIndex, avatarIndex);
-        await BroadcastState(state);
-        await BroadcastLobbyStatus();
+        var (gameCode, game) = _manager.CreateGame();
+        var state = game.CreateGame(playerName, Context.ConnectionId, colourIndex, avatarIndex, gameCode);
+
+        // Track connection and join SignalR group
+        _manager.TrackConnection(Context.ConnectionId, gameCode);
+        await Groups.AddToGroupAsync(Context.ConnectionId, gameCode);
+
+        await BroadcastState(state, gameCode);
+        await BroadcastLobbyStatus(gameCode, game);
         var createdPlayer = state.Players[0];
-        await Clients.All.SendAsync("PlayerJoined", createdPlayer.Name, createdPlayer.Colour);
+        await GameGroup(gameCode).SendAsync("PlayerJoined", createdPlayer.Name, createdPlayer.Colour);
     }
 
     public async Task JoinGame(string gameCode, string playerName, int colourIndex = 0, int avatarIndex = 0)
     {
-        var state = _game.JoinGame(gameCode, playerName, Context.ConnectionId, colourIndex, avatarIndex);
-        await BroadcastState(state);
-        await BroadcastLobbyStatus();
+        var game = _manager.GetGame(gameCode) ?? throw new HubException("Game not found.");
+        var state = game.JoinGame(gameCode, playerName, Context.ConnectionId, colourIndex, avatarIndex);
+
+        _manager.TrackConnection(Context.ConnectionId, gameCode);
+        await Groups.AddToGroupAsync(Context.ConnectionId, gameCode);
+
+        await BroadcastState(state, gameCode);
+        await BroadcastLobbyStatus(gameCode, game);
         var joinedPlayer = state.Players[^1];
-        await Clients.All.SendAsync("PlayerJoined", joinedPlayer.Name, joinedPlayer.Colour);
+        await GameGroup(gameCode).SendAsync("PlayerJoined", joinedPlayer.Name, joinedPlayer.Colour);
     }
 
     public async Task AddAI(int tier = 2, string? personality = null)
     {
-        var state = _game.AddAiPlayer(Context.ConnectionId, tier, personality);
-        await BroadcastState(state);
-        await BroadcastLobbyStatus();
+        var (game, gameCode) = GetCallerGame();
+        var state = game.AddAiPlayer(Context.ConnectionId, tier, personality);
+        await BroadcastState(state, gameCode);
+        await BroadcastLobbyStatus(gameCode, game);
         var aiPlayer = state.Players[^1];
-        await Clients.All.SendAsync("PlayerJoined", aiPlayer.Name, aiPlayer.Colour);
+        await GameGroup(gameCode).SendAsync("PlayerJoined", aiPlayer.Name, aiPlayer.Colour);
     }
 
     public async Task RemoveAI(int playerIndex)
     {
-        var state = _game.RemoveAI(Context.ConnectionId, playerIndex);
-        await BroadcastState(state);
-        await BroadcastLobbyStatus();
+        var (game, gameCode) = GetCallerGame();
+        var state = game.RemoveAI(Context.ConnectionId, playerIndex);
+        await BroadcastState(state, gameCode);
+        await BroadcastLobbyStatus(gameCode, game);
     }
 
     public async Task StartGame(string placementMode = "Auto")
     {
+        var (game, gameCode) = GetCallerGame();
         var mode = placementMode switch
         {
-            "FreeForAll" or "Free" => Models.PlacementMode.FreeForAll,
-            "Manual" => Models.PlacementMode.Manual,
-            _ => Models.PlacementMode.Auto
+            "FreeForAll" or "Free" => PlacementMode.FreeForAll,
+            "Manual" => PlacementMode.Manual,
+            _ => PlacementMode.Auto
         };
-        var state = _game.StartGame(Context.ConnectionId, mode);
-        await BroadcastState(state);
+        var state = game.StartGame(Context.ConnectionId, mode);
+        await BroadcastState(state, gameCode);
         if (state.HouseRules.UseMissions)
         {
             foreach (var p in state.Players.Where(p => p.Mission is not null && !p.IsAI))
                 await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
         }
-        _ai.TriggerIfAi();
+        _ai.TriggerIfAi(game, gameCode);
     }
+
+    // ─── Placement ───────────────────────────────────────────────────────────
 
     public async Task PlaceArmy(int territoryId, int count = 1)
     {
-        var playerIndex = _game.State!.CurrentPlayerIndex;
-        var (state, placed) = _game.PlaceArmy(Context.ConnectionId, territoryId, count);
-        await Clients.All.SendAsync("ArmiesPlaced", playerIndex, territoryId, placed);
-        await BroadcastState(state);
-        _ai.TriggerIfAi();
+        var (game, gameCode) = GetCallerGame();
+        var playerIndex = game.State!.CurrentPlayerIndex;
+        var (state, placed) = game.PlaceArmy(Context.ConnectionId, territoryId, count);
+        await GameGroup(gameCode).SendAsync("ArmiesPlaced", playerIndex, territoryId, placed);
+        await BroadcastState(state, gameCode);
+        _ai.TriggerIfAi(game, gameCode);
     }
+
+    // ─── Reinforce ───────────────────────────────────────────────────────────
 
     public async Task Reinforce(int territoryId, int count = 1)
     {
-        var (state, placed) = _game.Reinforce(Context.ConnectionId, territoryId, count);
+        var (game, gameCode) = GetCallerGame();
+        var (state, placed) = game.Reinforce(Context.ConnectionId, territoryId, count);
         _log.LogReinforce(state, state.CurrentPlayerIndex, territoryId);
-        await Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, placed);
-        if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
+        await GameGroup(gameCode).SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, territoryId, placed);
+        if (state.HouseRules.UseMissions && game.CheckMissionComplete(state.CurrentPlayerIndex))
         {
             state.Phase = GamePhase.GameOver;
-            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
+            await GameGroup(gameCode).SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
         }
-        await BroadcastState(state);
+        await BroadcastState(state, gameCode);
     }
 
     public async Task EndReinforce()
     {
-        var state = _game.EndReinforce(Context.ConnectionId);
-        await BroadcastState(state);
+        var (game, gameCode) = GetCallerGame();
+        var state = game.EndReinforce(Context.ConnectionId);
+        await BroadcastState(state, gameCode);
     }
 
     public async Task TradeCards(int[] cardIndices)
     {
-        var (state, armies, bonusIds) = _game.TradeCards(Context.ConnectionId, cardIndices);
-        await Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
+        var (game, gameCode) = GetCallerGame();
+        var (state, armies, bonusIds) = game.TradeCards(Context.ConnectionId, cardIndices);
+        await GameGroup(gameCode).SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
         await Clients.Caller.SendAsync("CardsUpdated", state.Players.First(p => p.ConnectionId == Context.ConnectionId).Cards);
-        await BroadcastState(state);
+        await BroadcastState(state, gameCode);
     }
 
-    public async Task EndAttack()
-    {
-        var state = _game.EndAttack(Context.ConnectionId);
-        var player = state.Players.First(p => p.ConnectionId == Context.ConnectionId);
-        await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
-        await BroadcastState(state);
-    }
+    // ─── Attack ──────────────────────────────────────────────────────────────
 
     public async Task Attack(int sourceId, int targetId, int diceCount)
     {
-        _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, false);
+        var (game, gameCode) = GetCallerGame();
+        _log.LogAttack(game.State!, game.State!.CurrentPlayerIndex, sourceId, targetId, false);
 
-        await Clients.All.SendAsync("CombatStarted");
-        var (state, result) = await _game.AttackWithDice(_hubContext, Context.ConnectionId, sourceId, targetId, diceCount);
+        await GameGroup(gameCode).SendAsync("CombatStarted");
+        var (state, result) = await game.AttackWithDice(_hubContext, gameCode, Context.ConnectionId, sourceId, targetId, diceCount);
 
-        await Clients.All.SendAsync("CombatResult", result);
-        await BroadcastState(state);
-        await Clients.All.SendAsync("CombatResolved");
+        await GameGroup(gameCode).SendAsync("CombatResult", result);
+        await BroadcastState(state, gameCode);
+        await GameGroup(gameCode).SendAsync("CombatResolved");
     }
 
     public async Task RollDice(int diceCount)
     {
-        await _game.PlayerRoll(_hubContext, Context.ConnectionId, diceCount);
+        var (game, gameCode) = GetCallerGame();
+        await game.PlayerRoll(_hubContext, gameCode, Context.ConnectionId, diceCount);
     }
 
     public async Task Blitz(int sourceId, int targetId)
     {
-        _log.LogAttack(_game.State!, _game.State!.CurrentPlayerIndex, sourceId, targetId, true);
-        await Clients.All.SendAsync("CombatStarted");
-        var (state, result) = _game.Blitz(Context.ConnectionId, sourceId, targetId);
-        await Clients.All.SendAsync("BlitzResult", result);
-        await BroadcastState(state);
-        await Clients.All.SendAsync("CombatResolved");
+        var (game, gameCode) = GetCallerGame();
+        _log.LogAttack(game.State!, game.State!.CurrentPlayerIndex, sourceId, targetId, true);
+        await GameGroup(gameCode).SendAsync("CombatStarted");
+        var (state, result) = game.Blitz(Context.ConnectionId, sourceId, targetId);
+        await GameGroup(gameCode).SendAsync("BlitzResult", result);
+        await BroadcastState(state, gameCode);
+        await GameGroup(gameCode).SendAsync("CombatResolved");
+    }
+
+    public async Task EndAttack()
+    {
+        var (game, gameCode) = GetCallerGame();
+        var state = game.EndAttack(Context.ConnectionId);
+        var player = state.Players.First(p => p.ConnectionId == Context.ConnectionId);
+        await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
+        await BroadcastState(state, gameCode);
     }
 
     public async Task MoveAfterCapture(int sourceId, int targetId, int armies)
     {
-        var (state, forcedTrade, eliminatedIndex, missionWon, fallbackPlayers) = _game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
-        await Clients.All.SendAsync("TroopsMovedIn", state.CurrentPlayerIndex, sourceId, targetId, armies);
+        var (game, gameCode) = GetCallerGame();
+        var (state, forcedTrade, eliminatedIndex, missionWon, fallbackPlayers) = game.MoveAfterCapture(Context.ConnectionId, sourceId, targetId, armies);
+        await GameGroup(gameCode).SendAsync("TroopsMovedIn", state.CurrentPlayerIndex, sourceId, targetId, armies);
         if (eliminatedIndex >= 0)
-            await Clients.All.SendAsync("PlayerEliminated", eliminatedIndex, state.CurrentPlayerIndex);
+            await GameGroup(gameCode).SendAsync("PlayerEliminated", eliminatedIndex, state.CurrentPlayerIndex);
         if (missionWon)
-            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
+            await GameGroup(gameCode).SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
         if (forcedTrade)
             await Clients.Caller.SendAsync("ForcedTradeRequired", state.Players.First(p => p.ConnectionId == Context.ConnectionId).Cards);
 
-        // Notify players whose elimination mission fell back to world domination
         foreach (var pi in fallbackPlayers)
         {
             var p = state.Players[pi];
@@ -171,122 +244,192 @@ public class GameHub : Hub
                 await Clients.Client(p.ConnectionId).SendAsync("MissionUpdated", p.Mission);
         }
 
-        await BroadcastState(state);
+        await BroadcastState(state, gameCode);
+    }
+
+    // ─── Fortify ─────────────────────────────────────────────────────────────
+
+    public async Task Fortify(int sourceId, int targetId, int armies)
+    {
+        var (game, gameCode) = GetCallerGame();
+        var state = game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
+        _log.LogFortify(state, state.CurrentPlayerIndex, sourceId, targetId, armies);
+        await GameGroup(gameCode).SendAsync("FortifyMoved", state.CurrentPlayerIndex, sourceId, targetId, armies);
+        if (state.HouseRules.UseMissions && game.CheckMissionComplete(state.CurrentPlayerIndex))
+        {
+            state.Phase = GamePhase.GameOver;
+            await GameGroup(gameCode).SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
+        }
+        await BroadcastState(state, gameCode);
     }
 
     public async Task EndTurn()
     {
-        if (_game.State?.TurnPhase == TurnPhase.Fortify)
-            _log.LogFortifySkip(_game.State, _game.State.CurrentPlayerIndex);
-        var state = _game.EndTurn(Context.ConnectionId);
-        await Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
-        await BroadcastState(state);
-        _ai.TriggerIfAi();
+        var (game, gameCode) = GetCallerGame();
+        if (game.State?.TurnPhase == TurnPhase.Fortify)
+            _log.LogFortifySkip(game.State, game.State.CurrentPlayerIndex);
+        var state = game.EndTurn(Context.ConnectionId);
+        await Task.Delay(1000); // breathing room for fortify animation to clear
+        await GameGroup(gameCode).SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await BroadcastState(state, gameCode);
+        _ai.TriggerIfAi(game, gameCode);
     }
 
-    public async Task Fortify(int sourceId, int targetId, int armies)
-    {
-        var state = _game.Fortify(Context.ConnectionId, sourceId, targetId, armies);
-        _log.LogFortify(state, state.CurrentPlayerIndex, sourceId, targetId, armies);
-        await Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, sourceId, targetId, armies);
-        if (state.HouseRules.UseMissions && _game.CheckMissionComplete(state.CurrentPlayerIndex))
-        {
-            state.Phase = GamePhase.GameOver;
-            await Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, state.Players[state.CurrentPlayerIndex].Mission?.Description);
-        }
-        await BroadcastState(state);
-    }
+    // ─── Reconnect / State ───────────────────────────────────────────────────
 
     public async Task Rejoin(string playerName)
     {
-        _game.Rejoin(playerName, Context.ConnectionId);
-        if (_game.State is not null)
+        // Find which game this player was in by scanning all games
+        foreach (var (code, game) in _manager.GetAllGames())
         {
-            await Clients.Caller.SendAsync("GameStateUpdated", _game.State);
-            var player = _game.State.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+            var player = game.State?.Players.FirstOrDefault(p => p.Name == playerName);
             if (player is not null)
             {
-                await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
+                game.Rejoin(playerName, Context.ConnectionId);
+                _manager.TrackConnection(Context.ConnectionId, code);
+                await Groups.AddToGroupAsync(Context.ConnectionId, code);
+
+                await Clients.Caller.SendAsync("GameStateUpdated", game.State);
+                if (player.Cards is not null)
+                    await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
                 if (player.Mission is not null)
                     await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
 
                 // Re-send RollPrompt if this player is the pending defender
-                var pending = _game.GetPending();
+                var pending = game.GetPending();
                 if (pending != null && !pending.DefenderRoll.Task.IsCompleted)
                 {
-                    var playerIndex = _game.State.Players.IndexOf(player);
+                    var playerIndex = game.State!.Players.IndexOf(player);
                     if (playerIndex == pending.DefenderPlayerIndex)
                         await Clients.Caller.SendAsync("RollPrompt",
                             new RollPrompt("defender", pending.DefenderDiceCount, pending.DefenderDiceCount, pending.SourceId, pending.TargetId, player.Name));
                 }
 
-                // Re-send ForcedTradeRequired if player has 5+ cards and it's their reinforce turn
-                if (_game.State.Phase == GamePhase.Playing
-                    && (_game.State.TurnPhase == TurnPhase.Reinforce || _game.State.TurnPhase == TurnPhase.Attack)
-                    && _game.State.Players[_game.State.CurrentPlayerIndex] == player
+                // Re-send ForcedTradeRequired if player has 5+ cards
+                if (game.State!.Phase == GamePhase.Playing
+                    && (game.State.TurnPhase == TurnPhase.Reinforce || game.State.TurnPhase == TurnPhase.Attack)
+                    && game.State.Players[game.State.CurrentPlayerIndex] == player
                     && player.Cards.Count >= 5)
                 {
                     await Clients.Caller.SendAsync("ForcedTradeRequired", player.Cards);
                 }
+                return;
             }
         }
     }
 
     public async Task GetState()
     {
-        if (_game.State is not null)
+        var code = _manager.GetGameCode(Context.ConnectionId);
+        if (code is null) return;
+        var game = _manager.GetGame(code);
+        if (game?.State is null) return;
+
+        await Clients.Caller.SendAsync("GameStateUpdated", game.State);
+        var player = game.State.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        if (player is not null)
         {
-            await Clients.Caller.SendAsync("GameStateUpdated", _game.State);
-            var player = _game.State.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
-            if (player is not null)
-            {
-                await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
-                if (player.Mission is not null)
-                    await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
-            }
+            await Clients.Caller.SendAsync("CardsUpdated", player.Cards);
+            if (player.Mission is not null)
+                await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
         }
     }
 
     public async Task GetMission()
     {
-        var player = _game.State?.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
+        var (game, _) = GetCallerGame();
+        var player = game.State?.Players.FirstOrDefault(p => p.ConnectionId == Context.ConnectionId);
         if (player?.Mission is not null)
             await Clients.Caller.SendAsync("MissionUpdated", player.Mission);
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
+    // ─── TV Registration ─────────────────────────────────────────────────────
+
+    public async Task RegisterAsTV(string gameCode)
     {
-        _game.UnregisterTV(Context.ConnectionId);
-        await base.OnDisconnectedAsync(exception);
+        await RegisterAsTVInternal(gameCode);
     }
 
-    public async Task SelectAttack(int? sourceId, int? targetId)
+    // Called by Unity with no args (backward compat) — auto-detect game
+    public async Task RegisterTV()
     {
-        await Clients.Others.SendAsync("AttackSelection", sourceId, targetId);
+        await RegisterAsTVInternal("");
     }
 
-    public Task RegisterAsTV()
+    private async Task RegisterAsTVInternal(string gameCode)
     {
-        _game.RegisterAsTV(Context.ConnectionId);
-        return Task.CompletedTask;
+        try
+        {
+            string? code = null;
+            if (!string.IsNullOrEmpty(gameCode))
+            {
+                var game = _manager.GetGame(gameCode) ?? throw new HubException("Game not found.");
+                code = gameCode;
+            }
+            else
+            {
+                var games = _manager.GetAllGames();
+                _logger.LogInformation("RegisterAsTV: {Count} games active", games.Count);
+                if (games.Count == 1)
+                    code = games.Keys.First();
+                else if (games.Count == 0)
+                    return; // No games yet — will pick up on next poll
+                else
+                    throw new HubException("Multiple games active — specify a game code.");
+            }
+
+            var g = _manager.GetGame(code!)!;
+            g.RegisterAsTV(Context.ConnectionId);
+            _manager.TrackConnection(Context.ConnectionId, code!);
+            await Groups.AddToGroupAsync(Context.ConnectionId, code!);
+            _logger.LogInformation("RegisterAsTV: success, code={Code}", code);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RegisterAsTV failed");
+            throw;
+        }
     }
 
     public void SubmitDiceResult(int[] attackerDice, int[] defenderDice)
     {
-        _game.SubmitDiceResult(attackerDice, defenderDice);
+        var game = _manager.GetGameByConnection(Context.ConnectionId);
+        game?.SubmitDiceResult(attackerDice, defenderDice);
     }
 
-    private async Task BroadcastState(object state)
+    public async Task GetActiveGames()
     {
-        await Clients.All.SendAsync("GameStateUpdated", state);
-        if (state is GameState gs && gs.Phase == GamePhase.GameOver)
+        var games = _manager.GetAllGames().Select(kv => new
         {
-            // Reveal all missions to all clients
-            var missions = gs.Players.Select(p => new { p.Name, p.Colour, Mission = p.Mission?.Description ?? "World domination" }).ToArray();
-            await Clients.All.SendAsync("AllMissionsRevealed", missions);
-            _ = Task.Run(() => RetrainModels());
-        }
+            code = kv.Key,
+            phase = kv.Value.State?.Phase.ToString() ?? "Lobby",
+            playerCount = kv.Value.State?.Players.Count ?? 0
+        }).ToArray();
+        await Clients.Caller.SendAsync("ActiveGames", games);
     }
+
+    public async Task SelectAttack(int? sourceId, int? targetId)
+    {
+        var code = _manager.GetGameCode(Context.ConnectionId);
+        if (code is not null)
+            await Clients.OthersInGroup(code).SendAsync("AttackSelection", sourceId, targetId);
+    }
+
+    // ─── Disconnect ──────────────────────────────────────────────────────────
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var code = _manager.GetGameCode(Context.ConnectionId);
+        if (code is not null)
+        {
+            var game = _manager.GetGame(code);
+            game?.UnregisterTV(Context.ConnectionId);
+        }
+        _manager.UntrackConnection(Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    // ─── ML Retrain ──────────────────────────────────────────────────────────
 
     private void RetrainModels()
     {
@@ -312,11 +455,5 @@ public class GameHub : Hub
             _logger.LogInformation("Retrain: models reloaded");
         }
         catch (Exception ex) { _logger.LogError(ex, "Retrain failed"); }
-    }
-
-    private async Task BroadcastLobbyStatus()
-    {
-        var status = _game.GetLobbyStatus();
-        await Clients.All.SendAsync("LobbyStatus", status);
     }
 }

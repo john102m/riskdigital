@@ -17,41 +17,82 @@ public static class ManagementEndpoints
             Results.File(Path.Combine(env.WebRootPath, "guide.html"), "text/html"));
 
         var admin = app.MapGroup("/admin");
-        admin.MapGet("/reset", (GameService game, IHubContext<GameHub> hub, bool? debug) =>
+
+        admin.MapGet("/games", (GameManager manager) =>
         {
-            game.DebugMode = debug ?? false;
-            game.Reset();
-            hub.Clients.All.SendAsync("GameStateUpdated", (object?)null);
-            return Results.Ok(game.DebugMode ? "Reset (debug mode — reduced armies)" : "Reset");
+            var games = manager.GetAllGames().Select(kv => new
+            {
+                Code = kv.Key,
+                Phase = kv.Value.State?.Phase.ToString() ?? "None",
+                Players = kv.Value.State?.Players.Select(p => new { p.Name, p.Colour, p.IsAI }).ToArray()
+            });
+            return Results.Ok(games);
         });
 
-        admin.MapGet("/testdice", async (IHubContext<GameHub> hub, int? a, int? d) =>
+        admin.MapGet("/reset/{gameCode}", (string gameCode, GameManager manager, IHubContext<GameHub> hub) =>
         {
-            await hub.Clients.All.SendAsync("CombatRollRequest", new Risk.Server.Models.CombatRollRequest(0, 1, a ?? 3, d ?? 2));
+            var game = manager.GetGame(gameCode);
+            if (game is null) return Results.NotFound("Game not found.");
+            manager.ResetGame(gameCode);
+            hub.Clients.Group(gameCode).SendAsync("GameStateUpdated", (object?)null);
+            return Results.Ok($"Reset game {gameCode}");
+        });
+
+        admin.MapGet("/reset", (GameManager manager, IHubContext<GameHub> hub, bool? debug) =>
+        {
+            manager.ResetAll();
+            hub.Clients.All.SendAsync("GameStateUpdated", (object?)null);
+            return Results.Ok("Reset all games");
+        });
+
+        admin.MapGet("/testdice", async (IHubContext<GameHub> hub, string? gameCode, int? a, int? d, GameManager manager) =>
+        {
+            // Send to specific game group or all
+            if (gameCode is not null)
+                await hub.Clients.Group(gameCode).SendAsync("CombatRollRequest", new Risk.Server.Models.CombatRollRequest(0, 1, a ?? 3, d ?? 2));
+            else
+                await hub.Clients.All.SendAsync("CombatRollRequest", new Risk.Server.Models.CombatRollRequest(0, 1, a ?? 3, d ?? 2));
             return Results.Ok($"Sent {a ?? 3}a {d ?? 2}d");
         });
 
-        admin.MapGet("/gameover", async (GameService game, IHubContext<GameHub> hub) =>
+        admin.MapGet("/gameover", async (GameManager manager, IHubContext<GameHub> hub, string? gameCode) =>
         {
-            if (game.State is null) return Results.BadRequest("No game");
+            // Find the game — by code or the only active game
+            GameService? game = null;
+            string? code = gameCode;
+            if (code is not null)
+                game = manager.GetGame(code);
+            else
+            {
+                var games = manager.GetAllGames();
+                if (games.Count == 1) { code = games.Keys.First(); game = games.Values.First(); }
+            }
+            if (game?.State is null) return Results.BadRequest("No game found");
+
             game.State.Phase = Risk.Server.Models.GamePhase.GameOver;
             var winnerIndex = game.State.CurrentPlayerIndex;
             var winner = game.State.Players[winnerIndex];
 
-            // Broadcast mission complete (triggers Unity win popup)
-            await hub.Clients.All.SendAsync("MissionComplete", winnerIndex, winner.Mission?.Description ?? "Debug game over");
+            await hub.Clients.Group(code!).SendAsync("MissionComplete", winnerIndex, winner.Mission?.Description ?? "Debug game over");
 
-            // Reveal all missions
             var missions = game.State.Players.Select(p => new { p.Name, p.Colour, Mission = p.Mission?.Description ?? "World domination" }).ToArray();
-            await hub.Clients.All.SendAsync("AllMissionsRevealed", missions);
+            await hub.Clients.Group(code!).SendAsync("AllMissionsRevealed", missions);
 
-            await hub.Clients.All.SendAsync("GameStateUpdated", game.State);
+            await hub.Clients.Group(code!).SendAsync("GameStateUpdated", game.State);
             return Results.Ok($"Game over — winner: {winner.Name}");
         });
 
-        admin.MapGet("/missions", (GameService game) =>
+        admin.MapGet("/missions", (GameManager manager, string? gameCode) =>
         {
-            if (game.State is null) return Results.BadRequest("No game");
+            GameService? game = null;
+            if (gameCode is not null)
+                game = manager.GetGame(gameCode);
+            else
+            {
+                var games = manager.GetAllGames();
+                if (games.Count == 1) game = games.Values.First();
+            }
+            if (game?.State is null) return Results.BadRequest("No game found");
             var missions = game.State.Players.Select((p, i) => new { Player = p.Name, Colour = p.Colour, Mission = p.Mission?.Description ?? "none", Fallback = p.Mission?.FallenBackToWorldDomination ?? false });
             return Results.Ok(missions);
         });

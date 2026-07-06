@@ -98,17 +98,43 @@ TV client joins a specific game code (entered on screen or passed via URL param 
 - SignalR method names — same contract, just scoped.
 - Handset UI — already uses game codes.
 
-## Migration Path
-1. Create `GameManager` class.
-2. Refactor `GameHub` to route by game code + use groups.
-3. Replace `Clients.All` with `Clients.Group(gameCode)` in `GameService` (pass `IHubContext` or a broadcast delegate).
-4. Add game code param to TV connections.
-5. Test two simultaneous games locally.
+## Branches
+
+- **Server + Handset:** `feat/multi-game-server-dotnet` (RiskDigital repo)
+- **Unity TV:** `feat/multi-game-server` (UnityDigitalRisk repo)
+
+## Implementation Plan
+
+### Phase 1 — Server (GameManager + Groups)
+1. Create `GameManager` class with `ConcurrentDictionary<string, GameService>`.
+2. Register `GameManager` as singleton, remove `GameService` singleton registration.
+3. Refactor `GameHub` — all methods route through `GameManager` by game code.
+4. Add SignalR groups — players + TVs join group keyed by game code.
+5. Replace `Clients.All.SendAsync(...)` with `Clients.Group(gameCode).SendAsync(...)`.
+6. Pass broadcast delegate or `IHubContext` + game code into `GameService` so it can push events.
+7. Connection tracking — `GameManager` maps connectionId → gameCode for disconnect/reconnect.
+8. Update admin endpoints: `/admin/games`, `/admin/reset/{gameCode}`, `/admin/reset` (all).
+
+### Phase 2 — Handset
+- Already sends game code on join — likely minimal changes.
+- Verify reconnect/rejoin routes to correct game instance.
+
+### Phase 3 — TV Clients
+- Web TV (`tv.html`): read game code from URL param (`?game=ABCD`), send on connect.
+- Unity TV: simple code entry screen before connecting, send game code on `RegisterTV`.
+
+### Phase 4 — Test
+- Two simultaneous games on Z440 (two browser tabs + two handsets).
+- Verify complete isolation (state, broadcasts, turns, combat, AI).
 
 ## Scaling Considerations
 - Each `GameService` is lightweight (in-memory state, no threads blocked).
 - 10 concurrent games would use negligible resources.
 - No database needed — still in-memory. Games are ephemeral.
+
+## Relationship to Multi-Household TV
+
+Multi-game must land **before** multi-household TV. The household registration (`RegisterTV(householdId, playerIndices)`) and dice routing are scoped to a single game — they build on top of the per-game group infrastructure created here. Doing them in the other order would require re-refactoring.
 
 ## Admin
 - `/admin/games` — list active games + player counts.

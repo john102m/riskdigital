@@ -101,7 +101,7 @@ public partial class GameService
     /// Attack with Unity dice delegation when connected, server-side fallback otherwise.
     /// </summary>
     public async Task<(GameState State, CombatResult Result)> AttackWithDice(
-        IHubContext<GameHub> hub, string connectionId, int sourceId, int targetId, int diceCount)
+        IHubContext<GameHub> hub, string gameCode, string connectionId, int sourceId, int targetId, int diceCount)
     {
         if (!IsUnityTVConnected)
             return Attack(connectionId, sourceId, targetId, diceCount);
@@ -130,19 +130,19 @@ public partial class GameService
             _ = Task.Run(async () =>
             {
                 await Task.Delay(1000);
-                await PlayerRoll(hub, attackerPlayer.ConnectionId, diceCount);
-                await PlayerRoll(hub, defenderPlayer.ConnectionId, defenderDiceCount);
+                await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
+                await PlayerRoll(hub, gameCode, defenderPlayer.ConnectionId, defenderDiceCount);
             });
         }
         else if (defenderPlayer.IsAI)
         {
-            await PlayerRoll(hub, attackerPlayer.ConnectionId, diceCount);
-            await PlayerRoll(hub, defenderPlayer.ConnectionId, defenderDiceCount);
+            await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
+            await PlayerRoll(hub, gameCode, defenderPlayer.ConnectionId, defenderDiceCount);
         }
         else
         {
-            await PlayerRoll(hub, attackerPlayer.ConnectionId, diceCount);
-            _ = Task.Run(() => hub.Clients.All.SendAsync("RollPrompt",
+            await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
+            _ = Task.Run(() => hub.Clients.Group(gameCode).SendAsync("RollPrompt",
                 new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name)));
         }
 
@@ -166,7 +166,7 @@ public partial class GameService
         return Attack(connectionId, sourceId, targetId, diceCount);
     }
 
-    public async Task PlayerRoll(IHubContext<GameHub> hub, string connectionId, int diceCount)
+    public async Task PlayerRoll(IHubContext<GameHub> hub, string gameCode, string connectionId, int diceCount)
     {
         if (_pending == null) return;
 
@@ -176,20 +176,20 @@ public partial class GameService
         if (connectionId == attackerConnId && !_pending.AttackerRoll.Task.IsCompleted)
         {
             _pending.AttackerRoll.TrySetResult(diceCount);
-            await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, _pending.SourceId, _pending.TargetId));
-            await AutoRollBotOpponent(hub, "defender");
+            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, _pending.SourceId, _pending.TargetId));
+            await AutoRollBotOpponent(hub, gameCode, "defender");
         }
         else if (connectionId == defenderConnId && !_pending.DefenderRoll.Task.IsCompleted)
         {
             int finalCount = Math.Min(diceCount, _pending.DefenderDiceCount);
             _pending.DefenderDiceCount = finalCount;
             _pending.DefenderRoll.TrySetResult(finalCount);
-            await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pending.SourceId, _pending.TargetId));
-            await AutoRollBotOpponent(hub, "attacker");
+            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pending.SourceId, _pending.TargetId));
+            await AutoRollBotOpponent(hub, gameCode, "attacker");
         }
     }
 
-    private async Task AutoRollBotOpponent(IHubContext<GameHub> hub, string role)
+    private async Task AutoRollBotOpponent(IHubContext<GameHub> hub, string gameCode, string role)
     {
         if (_pending == null) return;
 
@@ -199,7 +199,7 @@ public partial class GameService
             if (defender.IsAI)
             {
                 _pending.DefenderRoll.TrySetResult(_pending.DefenderDiceCount);
-                await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("defender", _pending.DefenderDiceCount, _pending.SourceId, _pending.TargetId));
+                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", _pending.DefenderDiceCount, _pending.SourceId, _pending.TargetId));
             }
         }
         else if (role == "attacker" && !_pending.AttackerRoll.Task.IsCompleted)
@@ -208,7 +208,7 @@ public partial class GameService
             if (attacker.IsAI)
             {
                 _pending.AttackerRoll.TrySetResult(_pending.AttackerDiceCount);
-                await hub.Clients.All.SendAsync("SpawnDice", new SpawnDice("attacker", _pending.AttackerDiceCount, _pending.SourceId, _pending.TargetId));
+                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", _pending.AttackerDiceCount, _pending.SourceId, _pending.TargetId));
             }
         }
     }

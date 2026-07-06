@@ -73,14 +73,14 @@ public partial class GameService
         return new { gameExists = true, gameCode = _state.GameCode, phase = _state.Phase.ToString(), playerCount = _state.Players.Count };
     }
 
-    public GameState CreateGame(string playerName, string connectionId, int colourIndex = 0, int avatarIndex = 0)
+    public GameState CreateGame(string playerName, string connectionId, int colourIndex = 0, int avatarIndex = 0, string? gameCode = null)
     {
         if (_state is not null && _state.Phase != GamePhase.GameOver)
             throw new HubException("A game is already in progress.");
 
         _state = new GameState
         {
-            GameCode = GenerateCode(),
+            GameCode = gameCode ?? GenerateCode(),
             Phase = GamePhase.Lobby
         };
 

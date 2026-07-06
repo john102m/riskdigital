@@ -13,15 +13,17 @@ Complete map of both repos. All docs live here in RiskDigital (single source of 
 | File | Purpose |
 |------|---------|
 | `Program.cs` | Entry point. ASP.NET minimal API, SignalR config, CORS, static files, ML model loading. |
-| `Hubs/GameHub.cs` | SignalR hub — thin relay. All client↔server methods. Delegates to GameService. |
-| `Services/GameService.cs` | Partial class root. Fields, constructor, lobby/setup, private helpers, `PendingCombat` class. |
+| `Hubs/GameHub.cs` | SignalR hub — thin relay. Routes all calls via GameManager, uses SignalR groups for scoped broadcasts. |
+| `Services/GameManager.cs` | Multi-game manager (singleton). ConcurrentDictionary of games, connection→game tracking, lifecycle. |
+| `Services/GameService.cs` | Partial class root. Fields, constructor, lobby/setup, private helpers, `PendingCombat` class. Per-game instance. |
 | `Services/GameService.Combat.cs` | Attack, Blitz, AttackWithDice, PlayerRoll, ResolveCombat, MoveAfterCapture, Unity dice delegation. |
 | `Services/GameService.Turn.cs` | TradeCards, Reinforce, EndReinforce, EndTurn, Fortify. |
-| `Services/AiService.cs` | AI player turn runner. Tiers 1–5 strategy, personality weights, ML-guided decisions. |
+| `Services/AiService.cs` | AI player turn runner. Tiers 1–5 strategy, personality weights, ML-guided decisions. Uses AsyncLocal for per-game context. |
 | `Services/MlModels.cs` | ML.NET model loading + predictions (blitz probability, behaviour models). |
 | `Services/ActionLogger.cs` | Logs human player decisions to CSV (reinforce, attack, fortify). Path cascade for WHUK. |
+| `Services/DiceAuditLogger.cs` | Logs all dice rolls for fairness analysis. |
 | `Services/RingBufferLogger.cs` | In-memory ILoggerProvider (300 lines). Powers `/admin/app-log`. |
-| `EndPointConfig/ManagementEndpoints.cs` | All admin/utility endpoints (reset, train, logs, testdice, etc). |
+| `EndPointConfig/ManagementEndpoints.cs` | All admin/utility endpoints (reset, train, logs, testdice, games list, etc). |
 | `Models/GameState.cs` | Core models: GameState, Player, Territory, Card, Mission, HouseRules, enums. |
 | `Models/CombatResult.cs` | DTOs: CombatResult, BlitzResult, RollPrompt, SpawnDice, CombatRollRequest records. |
 | `Models/TerritoryData.cs` | Positional records for territories.json deserialization. |
@@ -56,10 +58,12 @@ Complete map of both repos. All docs live here in RiskDigital (single source of 
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/admin/reset` | GET | Reset game state. `?debug=true` for reduced armies. |
-| `/admin/gameover` | GET | Force game over (testing). |
-| `/admin/missions` | GET | Show all players' missions (debug). |
-| `/admin/testdice` | GET | Trigger test dice roll on Unity (`?a=3&d=2`). |
+| `/admin/games` | GET | List all active games (code, phase, players). |
+| `/admin/reset` | GET | Reset ALL games. Broadcasts null to all clients. |
+| `/admin/reset/{gameCode}` | GET | Reset specific game. Only that game's clients affected. |
+| `/admin/gameover` | GET | Force game over (`?gameCode=XXXX` or single game). |
+| `/admin/missions` | GET | Show all players' missions (`?gameCode=XXXX` or single game). |
+| `/admin/testdice` | GET | Trigger test dice roll (`?gameCode=XXXX&a=3&d=2`). |
 | `/admin/train` | GET | Train all ML models (blitz + behaviour). |
 | `/admin/ml-status` | GET | Report loaded models + sample predictions. |
 | `/admin/app-log` | GET | Last 300 log lines (ring buffer, plain text). |
@@ -67,7 +71,6 @@ Complete map of both repos. All docs live here in RiskDigital (single source of 
 | `/admin/logs-download` | GET | Download all log CSVs as zip. |
 | `/admin/logs-upload` | POST | Upload zip of CSVs to restore training data. |
 | `/board` | GET | Serve web TV board (tv.html). |
-| `/tv` | GET | Alias for tv.html (clean URL). |
 | `/guide` | GET | Serve player guide. |
 
 ---
@@ -89,7 +92,7 @@ React 18 + TypeScript + Vite + Tailwind. Player controller app.
 | `src/components/ReinforceScreen.tsx` | Place reinforcements — accordion, card trade panel, +1/All buttons. |
 | `src/components/AttackScreen.tsx` | Source/target selection, dice, attack/blitz, move-in stepper, forced trade, defend overlay. |
 | `src/components/FortifyScreen.tsx` | Source/target selection, army stepper, skip/fortify. |
-| `src/components/GameOverScreen.tsx` | Winner/loser display, new game button. |
+| `src/components/GameOverScreen.tsx` | Winner/loser display, new game button (resets current game only). |
 | `src/components/ContinentAccordion.tsx` | Shared collapsible continent-grouped territory list. |
 | `src/components/CardTradePanel.tsx` | Shared card selection + trade UI. |
 | `src/components/CardBadge.tsx` | 🃏 card count badge — tap to open trade panel. |
@@ -114,13 +117,20 @@ Unity 6 LTS, 3D URP. Premium TV board with physics dice.
 
 | File | Purpose |
 |------|---------|
-| `SignalRClient.cs` | SignalR connection, event deserialization, RegisterAsTV, SendDiceResult. |
+| `SignalRClient.cs` | SignalR connection, event deserialization, JoinGame, RegisterAsTV, SendDiceResult, poll for games/state. |
 | `GameStateManager.cs` | Reactive game state holder, fires OnStateChanged. |
-| `BoardRenderer.cs` | 42 territory tokens (3D cylinders), colour/army updates, attack glow + pulse. |
-| `InfoPanel.cs` | UI panel: game code, phase, player list with colours. |
+| `GameJoinScreen.cs` | Game selection UI — code input, clickable game list, auto-hides on join, reappears on reset. |
+| `BoardRenderer.cs` | 42 territory tokens (3D cylinders), colour/army updates, attack glow + pulse, territory name labels. |
+| `UIOverlay.cs` | Info bar, activity feed, welcome screen, turn/blitz popups, game ceremony. |
+| `PopupManager.cs` | World-space popup system (turn announcements, blitz results). |
+| `MissionReveal.cs` | Mission reveal display on game over. |
+| `TerritoryNames.cs` | Static utility for abbreviated territory names. |
 | `CombatTheatre.cs` | State machine orchestrating dice panel lifecycle (6 states, explicit transitions). |
 | `DiceRoller.cs` | Spawns dice, physics simulation, SpawnSet/WaitAndReadAll, PlaceDiceAtValues (blitz display). |
 | `DiceFaceReader.cs` | Reads settled die face from local-axis dot products. |
+| `DiceSound.cs` | Collision-triggered dice rattle (one per throw). |
+| `BoardCamera.cs` | Smooth zoom in/out for combat, panel-aware bias, post-game drift. |
+| `MusicManager.cs` | Phase-based background music with crossfading. |
 | `CameraFlypath.cs` | Catmull-Rom spline camera sweep with randomisation + result position. |
 | `UnityMainThread.cs` | Dispatcher for marshalling SignalR callbacks to Unity main thread. |
 
@@ -153,17 +163,30 @@ All documentation for both repos lives here. Organised by area.
 | File | Purpose |
 |------|---------|
 | `ROADMAP.md` | Forward plan — tiered priority bands (A→E). |
-| `IDEAS.md` | Future possibilities backlog (unordered brain dump). |
-| `NEXT-STEPS.md` | ⚠️ Stale — superseded by ROADMAP.md. |
+| `MULTI-GAME-SERVER.md` | Multi-game server design (GameManager, groups, concurrent games). |
+| `PROPOSAL-MULTI-HOUSEHOLD-TV.md` | Multi-household TV — each household rolls own dice, static placement for remote. |
+| `PROPOSAL-PLACEMENT-MODES.md` | Placement mode selection (Auto/FreeForAll/Manual). |
+| `PROPOSAL-AI-REFACTOR.md` | AiService structural refactor (DRY, ~28% line reduction). |
+| `PROPOSAL-ERROR-HANDLING.md` | Error handling improvements (6 items). |
+| `PROPOSAL-PROGRESSIVE-DISCLOSURE.md` | Progressive disclosure UX for new players. |
+| `PROPOSAL-MISSION-FALLBACK-AND-CARD-UI.md` | Mission fallback notification + card UI. |
+| `PROPOSAL-IDLE-DRIFT.md` | Idle drift camera for Unity board. |
+| `GAME-START-END-POLISH.md` | Game ceremony design (welcome, win, start). |
+| `GAME-IDEAS.md` | Future game ideas (next project). |
+| `MULTI-GAME-SERVER.md` | Multi-game concurrent architecture design. |
+| `REPLACE-ALERTS.md` | Replace native alerts with toast component. |
 | `PROPOSAL-DEPLOY-ALL.md` | Deploy All button design. |
 | `REFACTORING.md` | Handset code duplication analysis. |
+| `IDEAS.md` | Future possibilities backlog (unordered brain dump). |
+| `NEXT-STEPS.md` | ⚠️ Stale — superseded by ROADMAP.md. |
 
 ### `docs/sessions/`
 
 | File | Purpose |
 |------|---------|
-| `PROGRESS.md` | Session-by-session development log (June 20–25). |
+| `PROGRESS.md` | Session-by-session development log (June 20 – July 3). |
 | `PLAYTEST-NOTES.md` | Live bugs/ideas captured during play. |
+| `SESSION-2026-07-06.md` | Multi-game server implementation session notes. |
 
 ### `docs/design/`
 
@@ -251,4 +274,4 @@ All documentation for both repos lives here. Organised by area.
 
 ---
 
-*Updated: 2026-06-29*
+*Updated: 2026-07-06*

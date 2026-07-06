@@ -268,6 +268,9 @@
         }
 
         // --- SignalR ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameCode = urlParams.get('game');
+
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('/gamehub')
             .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000])
@@ -418,12 +421,18 @@
         connection.onreconnected(() => {
             topLine.textContent = 'Connected';
             document.getElementById('splash-status').textContent = 'Waiting for game...';
+            const regMethod = gameCode ? 'RegisterAsTV' : 'RegisterTV';
+            const regArgs = gameCode ? [gameCode] : [];
+            connection.invoke(regMethod, ...regArgs).catch(() => {});
             connection.invoke('GetState');
         });
 
         connection.start().then(() => {
             topLine.textContent = 'Connected';
             document.getElementById('splash-status').textContent = 'Waiting for game...';
+            const regMethod = gameCode ? 'RegisterAsTV' : 'RegisterTV';
+            const regArgs = gameCode ? [gameCode] : [];
+            connection.invoke(regMethod, ...regArgs).catch(() => {});
             connection.invoke('GetState');
         });
 

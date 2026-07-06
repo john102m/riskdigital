@@ -12,7 +12,7 @@ export function GameOverScreen({ gameState, playerName }: Props) {
 
   const newGame = async () => {
     const base = import.meta.env.VITE_SERVER_URL || "";
-    await fetch(`${base}/admin/reset`);
+    await fetch(`${base}/admin/reset/${gameState.gameCode}`);
   };
 
   return (
