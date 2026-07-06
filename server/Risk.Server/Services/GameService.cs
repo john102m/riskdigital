@@ -179,7 +179,7 @@ public partial class GameService
         return _state;
     }
 
-    public GameState StartGame(string connectionId)
+    public GameState StartGame(string connectionId, PlacementMode mode = PlacementMode.Auto)
     {
         if (_state is null)
             throw new HubException("No game exists.");
@@ -189,14 +189,73 @@ public partial class GameService
         if (_state.Players.Count < 2)
             throw new HubException("Need at least 2 players.");
 
+        _state.HouseRules.PlacementMode = mode;
         DealTerritories();
         SetStartingArmies();
         GenerateDeck();
         if (_state.HouseRules.UseMissions) DealMissions();
-        _state.Phase = GamePhase.InitialPlacement;
-        _state.CurrentPlayerIndex = Random.Shared.Next(_state.Players.Count);
+
+        if (mode == PlacementMode.Auto)
+        {
+            // Auto-place all armies and skip straight to Playing
+            for (int i = 0; i < _state.Players.Count; i++)
+                AutoPlaceArmies(i);
+            _state.Phase = GamePhase.Playing;
+            _state.CurrentPlayerIndex = Random.Shared.Next(_state.Players.Count);
+            CalculateReinforcements();
+        }
+        else
+        {
+            _state.Phase = GamePhase.InitialPlacement;
+            _state.CurrentPlayerIndex = Random.Shared.Next(_state.Players.Count);
+        }
 
         return _state;
+    }
+
+    private void AutoPlaceArmies(int playerIndex)
+    {
+        var player = _state!.Players[playerIndex];
+        var myTerritories = _state.Territories.Where(t => t.OwnerId == playerIndex).ToList();
+
+        while (player.ReinforcementsRemaining > 0)
+        {
+            // Score each territory
+            var best = myTerritories
+                .Select(t => new
+                {
+                    Territory = t,
+                    Score = ScorePlacementTarget(t, playerIndex) * (0.8f + Random.Shared.NextDouble() * 0.4) // ±20% jitter
+                })
+                .OrderByDescending(x => x.Score)
+                .First().Territory;
+
+            best.Armies++;
+            player.ReinforcementsRemaining--;
+        }
+    }
+
+    private double ScorePlacementTarget(Territory t, int playerIndex)
+    {
+        double score = 0;
+        var adjacent = t.Adjacent.Select(a => _state!.Territories[a]).ToList();
+        bool isBorder = adjacent.Any(a => a.OwnerId != playerIndex);
+
+        if (isBorder) score += 3;
+
+        // Threat: adjacent enemy armies
+        int enemyThreat = adjacent.Where(a => a.OwnerId != playerIndex).Sum(a => a.Armies);
+        if (enemyThreat > 0) score += Math.Min(2, enemyThreat * 0.5);
+
+        // Continent progress
+        var contTerritories = _state!.Territories.Where(x => x.Continent == t.Continent).ToList();
+        int owned = contTerritories.Count(x => x.OwnerId == playerIndex);
+        if (owned > contTerritories.Count / 2) score += 1;
+
+        // Weakest border gets priority
+        if (isBorder && t.Armies <= 2) score += 1;
+
+        return score;
     }
 
     public (GameState State, int Placed) PlaceArmy(string connectionId, int territoryId, int count = 1)
@@ -204,20 +263,48 @@ public partial class GameService
         if (_state is null || _state.Phase != GamePhase.InitialPlacement)
             throw new HubException("Not in placement phase.");
 
-        var player = _state.Players[_state.CurrentPlayerIndex];
-        if (player.ConnectionId != connectionId)
-            throw new HubException("Not your turn.");
+        int callerIndex;
+        Player player;
+
+        if (_state.HouseRules.PlacementMode == PlacementMode.FreeForAll)
+        {
+            // Any player can place anytime
+            callerIndex = _state.Players.FindIndex(p => p.ConnectionId == connectionId);
+            if (callerIndex < 0) throw new HubException("Not in this game.");
+            player = _state.Players[callerIndex];
+        }
+        else
+        {
+            // Manual: strict turn order
+            player = _state.Players[_state.CurrentPlayerIndex];
+            callerIndex = _state.CurrentPlayerIndex;
+            if (player.ConnectionId != connectionId)
+                throw new HubException("Not your turn.");
+        }
+
         if (player.ReinforcementsRemaining <= 0)
             throw new HubException("No armies remaining.");
 
         var territory = _state.Territories.FirstOrDefault(t => t.Id == territoryId);
-        if (territory is null || territory.OwnerId != _state.CurrentPlayerIndex)
+        if (territory is null || territory.OwnerId != callerIndex)
             throw new HubException("You don't own that territory.");
 
         var actual = Math.Min(Math.Max(1, count), player.ReinforcementsRemaining);
         territory.Armies += actual;
         player.ReinforcementsRemaining -= actual;
-        AdvancePlacementTurn();
+
+        // Check if all players done (both modes use this)
+        if (_state.Players.All(p => p.ReinforcementsRemaining <= 0))
+        {
+            _state.Phase = GamePhase.Playing;
+            _state.CurrentPlayerIndex = Random.Shared.Next(_state.Players.Count);
+            _state.TurnPhase = TurnPhase.Reinforce;
+            CalculateReinforcements();
+        }
+        else if (_state.HouseRules.PlacementMode == PlacementMode.Manual)
+        {
+            AdvancePlacementTurn();
+        }
 
         return (_state, actual);
     }

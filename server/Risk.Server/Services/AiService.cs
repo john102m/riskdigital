@@ -9,9 +9,27 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
     public void TriggerIfAi()
     {
         if (game.State is null) return;
+
+        // FFA placement: trigger all bots in parallel
+        if (game.State.Phase == GamePhase.InitialPlacement &&
+            game.State.HouseRules.PlacementMode == Models.PlacementMode.FreeForAll)
+        {
+            foreach (var p in game.State.Players.Where(p => p.IsAI && !p.IsEliminated && p.ReinforcementsRemaining > 0))
+                _ = RunBotPlacement(p);
+            return;
+        }
+
         var player = game.State.Players[game.State.CurrentPlayerIndex];
         if (!player.IsAI || player.IsEliminated) return;
         _ = RunTurnAsync();
+    }
+
+    private async Task RunBotPlacement(Player player)
+    {
+        var state = game.State!;
+        var connId = player.ConnectionId;
+        await Delay(1000, 2000); // stagger start
+        await RunPlacement(state, player, connId);
     }
 
     private async Task RunTurnAsync()
@@ -77,29 +95,34 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
     private async Task RunPlacement(GameState state, Player player, string connId)
     {
-        while (player.ReinforcementsRemaining > 0 && state.Players[state.CurrentPlayerIndex].ConnectionId == connId)
+        var playerIndex = state.Players.IndexOf(player);
+        while (player.ReinforcementsRemaining > 0 && state.Phase == GamePhase.InitialPlacement)
         {
             await Delay(1500, 2000);
-            var owned = state.Territories.Where(t => t.OwnerId == state.CurrentPlayerIndex).ToList();
+            if (state.Phase != GamePhase.InitialPlacement) break; // game advanced
+            var owned = state.Territories.Where(t => t.OwnerId == playerIndex).ToList();
             Territory target;
             if (player.AiTier >= 2)
             {
                 // Tier 2: place on front-line territory with fewest armies
-                var frontLine = owned.Where(t => t.Adjacent.Any(a => state.Territories[a].OwnerId != state.CurrentPlayerIndex)).ToList();
+                var frontLine = owned.Where(t => t.Adjacent.Any(a => state.Territories[a].OwnerId != playerIndex)).ToList();
                 target = (frontLine.Count > 0 ? frontLine : owned).OrderBy(t => t.Armies).First();
             }
             else
             {
                 target = owned[Random.Shared.Next(owned.Count)];
             }
-            var idx = state.CurrentPlayerIndex;
             game.PlaceArmy(connId, target.Id);
-            await hub.Clients.All.SendAsync("ArmiesPlaced", idx, target.Id, 1);
+            await hub.Clients.All.SendAsync("ArmiesPlaced", playerIndex, target.Id, 1);
             await Broadcast();
         }
 
-        await Delay(500);
-        TriggerIfAi();
+        // In manual mode, trigger next AI if it's their turn
+        if (state.HouseRules.PlacementMode == Models.PlacementMode.Manual)
+        {
+            await Delay(500);
+            TriggerIfAi();
+        }
     }
 
     private async Task RunReinforce(GameState state, Player player, string connId)

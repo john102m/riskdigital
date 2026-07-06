@@ -17,12 +17,14 @@ export function PlacementScreen({ connection, gameState, playerName, showToast }
   const myIndex = gameState.players.findIndex((p) => p.name === playerName);
   const me = gameState.players[myIndex];
   const isMyTurn = gameState.currentPlayerIndex === myIndex;
+  const isFFA = gameState.houseRules?.placementMode === "FreeForAll";
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const myTerritories = gameState.territories.filter((t) => t.ownerId === myIndex);
 
   const [expanded, setExpanded] = useState<string | null>(() => groupByContinent(myTerritories)[0]?.continent ?? null);
 
-  if (!isMyTurn) {
+  // In FFA mode, always show placement UI (no waiting screen)
+  if (!isMyTurn && !isFFA) {
     return (
       <div className="h-dvh bg-gray-900 text-white flex flex-col items-center justify-center p-4" style={{ borderTop: `3px solid ${currentPlayer.colour}` }}>
         <span className="text-2xl font-bold" style={{ color: currentPlayer.colour }}>{currentPlayer.name}</span>

@@ -63,9 +63,15 @@ public class GameHub : Hub
         await BroadcastLobbyStatus();
     }
 
-    public async Task StartGame()
+    public async Task StartGame(string placementMode = "Auto")
     {
-        var state = _game.StartGame(Context.ConnectionId);
+        var mode = placementMode switch
+        {
+            "FreeForAll" or "Free" => Models.PlacementMode.FreeForAll,
+            "Manual" => Models.PlacementMode.Manual,
+            _ => Models.PlacementMode.Auto
+        };
+        var state = _game.StartGame(Context.ConnectionId, mode);
         await BroadcastState(state);
         if (state.HouseRules.UseMissions)
         {

@@ -144,8 +144,85 @@ Non-host players see the selection but can't change it.
 
 ---
 
-## Questions
+## Decisions
 
-1. Free-for-all — should bots place instantly or with a small staggered delay (1-2s per bot, feels more natural on TV)?
-2. Auto mode — should players see the placement happen (animated) or just instant?
-3. Default for multiplayer vs solo? (Could auto-select Auto when all opponents are bots)
+1. **Free-for-all bot pace** — Bots mirror human placement pace. Staggered delay (1–2s per placement) so you see them appearing on the TV board alongside human placements. Feels like everyone's at the table together, not bots dumping instantly.
+
+2. **Auto mode animation** — Placements animate the same way as reinforce (pulse on territory, click sound, staggered per player). Not instant — you see the board populate over a few seconds. Same visual language as the rest of the game.
+
+3. **Smart default selection** — The lobby defaults based on player composition:
+   - **All bots (solo play):** Default to Auto. You're testing/playing fast, skip the tedium.
+   - **Any humans present:** Default to Free-for-all. The social mode — everyone placing at once.
+   - **Host can always override** to any of the three modes regardless.
+   
+   This means most games "just work" without the host thinking about it. Solo against bots → instant start. Family game night → free-for-all energy.
+
+---
+
+## Implementation Plan
+
+### Step 1: Server — PlacementMode enum + HouseRules (5 min)
+- Add `PlacementMode` enum: `Auto`, `FreeForAll`, `Manual`
+- Add `PlacementMode` field to `HouseRules` (default `Auto`)
+- Pass mode from `StartGame` hub method
+
+**Files:** `server/Risk.Server/Models/GameState.cs`, `server/Risk.Server/Hubs/GameHub.cs`
+
+### Step 2: Server — Auto mode (20 min)
+- New method `AutoPlaceAllArmies()` in `GameService.cs`
+- Scoring algorithm (border +3, threat +2, continent progress +1, weakest border +1, ±20% jitter)
+- `StartGame` checks mode: if Auto → call `AutoPlaceAllArmies()` for each player → skip to `GamePhase.Playing`
+- Broadcast `ArmiesPlaced` per territory for animation on TV/handset (staggered with small delay)
+
+**Files:** `server/Risk.Server/Services/GameService.cs`
+
+### Step 3: Server — Free-for-all mode (15 min)
+- `PlaceArmy` — when mode is `FreeForAll`, remove `CurrentPlayerIndex` check
+- Any player with `ReinforcementsRemaining > 0` can place anytime
+- After each placement, check if ALL players have 0 remaining → advance to Playing
+- Bots: trigger placement on a 1–2s timer per army (mirror human pace)
+
+**Files:** `server/Risk.Server/Services/GameService.cs`, `server/Risk.Server/Services/AiService.cs`
+
+### Step 4: Handset — Lobby toggle (15 min)
+- Single tap-to-cycle button: `🚀 Auto` → `🤝 Free` → `📋 Manual` → loops
+- Host taps to cycle through modes. One button, minimal footprint.
+- Smart default: check if all non-host players are AI → preselect Auto, else preselect Free
+- Non-host sees current mode (read-only, no tap)
+- Send selected mode with `StartGame` invocation
+
+**Files:** `handset/src/components/LobbyScreen.tsx`, `handset/src/types/game.ts`
+
+### Step 5: Handset — PlacementScreen for Free-for-all (10 min)
+- When mode is FreeForAll: always show your territories (never show "waiting for X")
+- Show remaining count. Hide "Done" until 0 remaining.
+- Keep the existing screen — just remove the `!isMyTurn` early return
+
+**Files:** `handset/src/components/PlacementScreen.tsx`
+
+### Step 6: TV boards — no changes needed
+- Auto mode: `ArmiesPlaced` events arrive with stagger → existing pulse animation handles it
+- Free-for-all: same `ArmiesPlaced` events from multiple players → same rendering
+- Web board and Unity board both already react to `ArmiesPlaced` regardless of who sent it
+
+**Files:** None
+
+### Step 7: Manual mode — no changes
+- Already works. Just the default path when `PlacementMode.Manual` is set.
+
+**Files:** None
+
+---
+
+## Execution Order
+
+| # | What | Blocked by |
+|---|------|-----------|
+| 1 | Enum + HouseRules | Nothing |
+| 2 | Auto placement algorithm | Step 1 |
+| 3 | Free-for-all server logic | Step 1 |
+| 4 | Lobby toggle UI | Step 1 |
+| 5 | PlacementScreen FFA mode | Step 3 |
+| 6 | Test all three modes | Steps 2–5 |
+
+Steps 2, 3, and 4 can be done in parallel after Step 1. Total estimate: ~1 hour.
