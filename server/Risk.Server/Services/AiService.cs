@@ -4,36 +4,48 @@ using Risk.Server.Models;
 
 namespace Risk.Server.Services;
 
-public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
+public class AiService(IHubContext<GameHub> hub, MlModels ml)
 {
-    public void TriggerIfAi()
+    private static readonly AsyncLocal<GameService> _game = new();
+    private static readonly AsyncLocal<string> _gameCode = new();
+
+    private GameService game { get => _game.Value!; set => _game.Value = value; }
+    private string gameCode { get => _gameCode.Value!; set => _gameCode.Value = value; }
+    private IClientProxy Group => hub.Clients.Group(gameCode);
+
+    public void TriggerIfAi(GameService gameInstance, string code)
     {
-        if (game.State is null) return;
+        if (gameInstance.State is null) return;
 
         // FFA placement: trigger all bots in parallel
-        if (game.State.Phase == GamePhase.InitialPlacement &&
-            game.State.HouseRules.PlacementMode == Models.PlacementMode.FreeForAll)
+        if (gameInstance.State.Phase == GamePhase.InitialPlacement &&
+            gameInstance.State.HouseRules.PlacementMode == Models.PlacementMode.FreeForAll)
         {
-            foreach (var p in game.State.Players.Where(p => p.IsAI && !p.IsEliminated && p.ReinforcementsRemaining > 0))
-                _ = RunBotPlacement(p);
+            foreach (var p in gameInstance.State.Players.Where(p => p.IsAI && !p.IsEliminated && p.ReinforcementsRemaining > 0))
+                _ = RunBotPlacement(p, gameInstance, code);
             return;
         }
 
-        var player = game.State.Players[game.State.CurrentPlayerIndex];
+        var player = gameInstance.State.Players[gameInstance.State.CurrentPlayerIndex];
         if (!player.IsAI || player.IsEliminated) return;
-        _ = RunTurnAsync();
+        _ = RunTurnAsync(gameInstance, code);
     }
 
-    private async Task RunBotPlacement(Player player)
+    private async Task RunBotPlacement(Player player, GameService gameInstance, string code)
     {
-        var state = game.State!;
+        game = gameInstance;
+        gameCode = code;
+        var state = gameInstance.State!;
         var connId = player.ConnectionId;
         await Delay(1000, 2000); // stagger start
         await RunPlacement(state, player, connId);
     }
 
-    private async Task RunTurnAsync()
+    private async Task RunTurnAsync(GameService gameInstance, string code)
     {
+        // Set AsyncLocal context for this async call chain
+        game = gameInstance;
+        gameCode = code;
         try
         {
             await Delay(2500, 3000); // let turn popup display on TV
@@ -86,8 +98,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     game.EndTurn(connId);
 
                 await Broadcast();
-                await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
-                TriggerIfAi();
+                await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+                TriggerIfAi(game, gameCode);
             }
             catch { /* last resort — at least we tried */ }
         }
@@ -113,7 +125,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 target = owned[Random.Shared.Next(owned.Count)];
             }
             game.PlaceArmy(connId, target.Id);
-            await hub.Clients.All.SendAsync("ArmiesPlaced", playerIndex, target.Id, 1);
+            await Group.SendAsync("ArmiesPlaced", playerIndex, target.Id, 1);
             await Broadcast();
         }
 
@@ -121,7 +133,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         if (state.HouseRules.PlacementMode == Models.PlacementMode.Manual)
         {
             await Delay(500);
-            TriggerIfAi();
+            TriggerIfAi(game, gameCode);
         }
     }
 
@@ -134,7 +146,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             var set = FindValidSet(player.Cards);
             if (set is null) break;
             var (_, armies, _) = game.TradeCards(connId, set);
-            await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
+            await Group.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
             await Broadcast();
         }
 
@@ -147,7 +159,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 await Delay((int)(2000 * w.TimingMultiplier), (int)(2500 * w.TimingMultiplier));
                 var (_, armies, _) = game.TradeCards(connId, set);
-                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
+                await Group.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
                 await Broadcast();
             }
         }
@@ -160,7 +172,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 await Delay(2000, 2500);
                 var (_, armies, _) = game.TradeCards(connId, set);
-                await hub.Clients.All.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
+                await Group.SendAsync("CardTraded", state.CurrentPlayerIndex, armies);
                 await Broadcast();
             }
         }
@@ -196,7 +208,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 target = owned[Random.Shared.Next(owned.Count)];
             }
             game.Reinforce(connId, target.Id);
-            await hub.Clients.All.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, target.Id, 1);
+            await Group.SendAsync("ArmiesPlaced", state.CurrentPlayerIndex, target.Id, 1);
             await Broadcast();
         }
 
@@ -237,7 +249,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay(2500, 3500);
         }
 
-        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await Group.SendAsync("AttackSelection", null, null);
         await EndAttack(state, player, connId);
     }
 
@@ -287,9 +299,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             if (bestSource is null || bestTarget is null || bestScore < 0.4f) break;
 
             // Show selection
-            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, (int?)null);
+            await Group.SendAsync("AttackSelection", bestSource.Id, (int?)null);
             await Delay(1000, 1500);
-            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
+            await Group.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
             await Delay(1500, 2000);
 
             float captureChance = ml.PredictBlitz(bestSource.Armies, bestTarget.Armies);
@@ -297,7 +309,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 // High confidence — blitz
                 var (_, blitzResult) = game.Blitz(connId, bestSource.Id, bestTarget.Id);
-                await hub.Clients.All.SendAsync("BlitzResult", blitzResult);
+                await Group.SendAsync("BlitzResult", blitzResult);
                 await Broadcast();
 
                 if (blitzResult.Captured)
@@ -308,7 +320,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     {
                         var (_, _, _, missionWon, _) = game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
                         if (missionWon)
-                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
+                            await Group.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -320,8 +332,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 // Medium confidence — single attack
                 int dice = Math.Min(3, bestSource.Armies - 1);
-                var (_, result) = await game.AttackWithDice(hub, connId, bestSource.Id, bestTarget.Id, dice);
-                await hub.Clients.All.SendAsync("CombatResult", result);
+                var (_, result) = await game.AttackWithDice(hub, gameCode, connId, bestSource.Id, bestTarget.Id, dice);
+                await Group.SendAsync("CombatResult", result);
                 await Broadcast();
 
                 if (result.Captured)
@@ -332,7 +344,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     {
                         var (_, _, _, missionWon2, _) = game.MoveAfterCapture(connId, bestSource.Id, bestTarget.Id, max);
                         if (missionWon2)
-                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
+                            await Group.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -342,7 +354,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay(2000, 3000);
         }
 
-        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await Group.SendAsync("AttackSelection", null, null);
         await EndAttack(state, player, connId);
     }
 
@@ -376,16 +388,16 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             var target = targets[0];
 
             // Show selection
-            await hub.Clients.All.SendAsync("AttackSelection", source.Id, (int?)null);
+            await Group.SendAsync("AttackSelection", source.Id, (int?)null);
             await Delay(1000, 1500);
-            await hub.Clients.All.SendAsync("AttackSelection", source.Id, target.Id);
+            await Group.SendAsync("AttackSelection", source.Id, target.Id);
             await Delay(1500, 2000);
 
             // Blitz if 5+ armies, otherwise single attack
             if (source.Armies >= 5)
             {
                 var (_, blitzResult) = game.Blitz(connId, source.Id, target.Id);
-                await hub.Clients.All.SendAsync("BlitzResult", blitzResult);
+                await Group.SendAsync("BlitzResult", blitzResult);
                 await Broadcast();
 
                 if (blitzResult.Captured)
@@ -396,7 +408,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     {
                         var (_, _, _, missionWon3, _) = game.MoveAfterCapture(connId, source.Id, target.Id, max);
                         if (missionWon3)
-                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
+                            await Group.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -407,8 +419,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             else
             {
                 int dice = Math.Min(3, source.Armies - 1);
-                var (_, result) = await game.AttackWithDice(hub, connId, source.Id, target.Id, dice);
-                await hub.Clients.All.SendAsync("CombatResult", result);
+                var (_, result) = await game.AttackWithDice(hub, gameCode, connId, source.Id, target.Id, dice);
+                await Group.SendAsync("CombatResult", result);
                 await Broadcast();
 
                 if (result.Captured)
@@ -419,7 +431,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                     {
                         var (_, _, _, missionWon4, _) = game.MoveAfterCapture(connId, source.Id, target.Id, max);
                         if (missionWon4)
-                            await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
+                            await Group.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                         await Broadcast();
                     }
                     if (state.Phase == GamePhase.GameOver) return;
@@ -429,7 +441,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay(2000, 3000);
         }
 
-        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await Group.SendAsync("AttackSelection", null, null);
         await EndAttack(state, player, connId);
     }
 
@@ -454,14 +466,14 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         if (targets.Count == 0) return false;
         var target = targets[Random.Shared.Next(targets.Count)];
 
-        await hub.Clients.All.SendAsync("AttackSelection", source.Id, (int?)null);
+        await Group.SendAsync("AttackSelection", source.Id, (int?)null);
         await Delay(1000, 1500);
-        await hub.Clients.All.SendAsync("AttackSelection", source.Id, target.Id);
+        await Group.SendAsync("AttackSelection", source.Id, target.Id);
         await Delay(1500, 2000);
 
         int dice = Math.Min(3, source.Armies - 1);
-        var (_, result) = await game.AttackWithDice(hub, connId, source.Id, target.Id, dice);
-        await hub.Clients.All.SendAsync("CombatResult", result);
+        var (_, result) = await game.AttackWithDice(hub, gameCode, connId, source.Id, target.Id, dice);
+        await Group.SendAsync("CombatResult", result);
         await Broadcast();
 
         if (result.Captured)
@@ -473,7 +485,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 var (_, _, _, missionWon5, _) = game.MoveAfterCapture(connId, source.Id, target.Id, min);
                 if (missionWon5)
-                    await hub.Clients.All.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
+                    await Group.SendAsync("MissionComplete", state.CurrentPlayerIndex, player.Mission?.Description);
                 await Broadcast();
             }
             if (state.Phase == GamePhase.GameOver) return false;
@@ -505,9 +517,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         {
             await Delay(1000, 1500);
             game.EndTurn(connId);
-            await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+            await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
             await Broadcast();
-            TriggerIfAi();
+            TriggerIfAi(game, gameCode);
             return;
         }
 
@@ -527,15 +539,15 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             var target = targets[Random.Shared.Next(targets.Count)];
             int armies = Random.Shared.Next(1, source.Armies);
             game.Fortify(connId, source.Id, target.Id, armies);
-            await hub.Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
+            await Group.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
             await Broadcast();
         }
 
         await Delay(1000, 1500);
         game.EndTurn(connId);
-        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
-        TriggerIfAi();
+        TriggerIfAi(game, gameCode);
     }
 
     private async Task RunStrategicFortify(GameState state, Player player, string connId)
@@ -547,7 +559,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         {
             int armies = source.Armies - 1;
             game.Fortify(connId, source.Id, target.Id, armies);
-            await hub.Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
+            await Group.SendAsync("FortifyMoved", state.CurrentPlayerIndex, source.Id, target.Id, armies);
             await Broadcast();
         }
         else
@@ -558,9 +570,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
         await Delay(1000, 1500);
         game.EndTurn(connId);
-        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
-        TriggerIfAi();
+        TriggerIfAi(game, gameCode);
     }
 
     private async Task RunAggressiveFortifyLogic(GameState state, string connId)
@@ -589,7 +601,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             {
                 int armies = inland.Armies - 1;
                 game.Fortify(connId, inland.Id, frontTarget.Id, armies);
-                await hub.Clients.All.SendAsync("FortifyMoved", state.CurrentPlayerIndex, inland.Id, frontTarget.Id, armies);
+                await Group.SendAsync("FortifyMoved", state.CurrentPlayerIndex, inland.Id, frontTarget.Id, armies);
                 await Broadcast();
             }
         }
@@ -608,9 +620,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         await RunAggressiveFortifyLogic(state, connId);
         await Delay(1000, 1500);
         game.EndTurn(connId);
-        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
-        TriggerIfAi();
+        TriggerIfAi(game, gameCode);
     }
 
     // --- Tier 4: Enhanced Heuristics + Personality ---
@@ -659,16 +671,16 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             if (bestSource is null || bestTarget is null || bestScore < threshold) break;
 
             // Show selection
-            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, (int?)null);
+            await Group.SendAsync("AttackSelection", bestSource.Id, (int?)null);
             await Delay((int)(1000 * w.TimingMultiplier), (int)(1500 * w.TimingMultiplier));
-            await hub.Clients.All.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
+            await Group.SendAsync("AttackSelection", bestSource.Id, bestTarget.Id);
             await Delay((int)(1500 * w.TimingMultiplier), (int)(2000 * w.TimingMultiplier));
 
             float captureChance = ml.PredictBlitz(bestSource.Armies, bestTarget.Armies);
             if (captureChance > 0.6f && bestSource.Armies >= 4)
             {
                 var (_, blitzResult) = game.Blitz(connId, bestSource.Id, bestTarget.Id);
-                await hub.Clients.All.SendAsync("BlitzResult", blitzResult);
+                await Group.SendAsync("BlitzResult", blitzResult);
                 await Broadcast();
 
                 if (blitzResult.Captured)
@@ -690,8 +702,8 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             else
             {
                 int dice = Math.Min(3, bestSource.Armies - 1);
-                var (_, result) = await game.AttackWithDice(hub, connId, bestSource.Id, bestTarget.Id, dice);
-                await hub.Clients.All.SendAsync("CombatResult", result);
+                var (_, result) = await game.AttackWithDice(hub, gameCode, connId, bestSource.Id, bestTarget.Id, dice);
+                await Group.SendAsync("CombatResult", result);
                 await Broadcast();
 
                 if (result.Captured)
@@ -710,7 +722,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
             await Delay((int)(2000 * w.TimingMultiplier), (int)(3000 * w.TimingMultiplier));
         }
 
-        await hub.Clients.All.SendAsync("AttackSelection", null, null);
+        await Group.SendAsync("AttackSelection", null, null);
         await EndAttack(state, player, connId);
     }
 
@@ -745,13 +757,13 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
                 {
                     int armies = donor.Armies - 1;
                     game.Fortify(connId, donor.Id, frontVsWeak.Id, armies);
-                    await hub.Clients.All.SendAsync("FortifyMoved", myIndex, donor.Id, frontVsWeak.Id, armies);
+                    await Group.SendAsync("FortifyMoved", myIndex, donor.Id, frontVsWeak.Id, armies);
                     await Broadcast();
                     await Delay(1000, 1500);
                     game.EndTurn(connId);
-                    await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+                    await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
                     await Broadcast();
-                    TriggerIfAi();
+                    TriggerIfAi(game, gameCode);
                     return;
                 }
             }
@@ -763,7 +775,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
         {
             int armies = source.Armies - 1;
             game.Fortify(connId, source.Id, target.Id, armies);
-            await hub.Clients.All.SendAsync("FortifyMoved", myIndex, source.Id, target.Id, armies);
+            await Group.SendAsync("FortifyMoved", myIndex, source.Id, target.Id, armies);
             await Broadcast();
         }
         else
@@ -773,9 +785,9 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
         await Delay(1000, 1500);
         game.EndTurn(connId);
-        await hub.Clients.All.SendAsync("TurnStarted", state.CurrentPlayerIndex);
+        await Group.SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await Broadcast();
-        TriggerIfAi();
+        TriggerIfAi(game, gameCode);
     }
 
     private Territory ScoreTier4ReinforceTarget(GameState state, List<Territory> owned, PersonalityWeights w)
@@ -1130,7 +1142,7 @@ public class AiService(GameService game, IHubContext<GameHub> hub, MlModels ml)
 
     private async Task Broadcast()
     {
-        await hub.Clients.All.SendAsync("GameStateUpdated", game.State);
+        await Group.SendAsync("GameStateUpdated", game.State);
     }
 
     private static async Task Delay(int minMs, int maxMs)

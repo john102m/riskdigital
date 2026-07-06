@@ -55,7 +55,7 @@ export function StatusBadge({ mission, gameState, playerName }: Props) {
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setShow(false)} />
           <div className="fixed top-14 right-2 z-[70] bg-amber-50 border-2 border-amber-800/60 rounded-lg p-3 max-w-64 shadow-lg">
-          <p className="text-sm text-amber-800 uppercase tracking-wider mb-2 font-bold">Status</p>
+          <p className="text-sm text-amber-800 uppercase tracking-wider mb-2 font-bold flex justify-between">Status <span className="text-amber-600 normal-case tracking-normal">{gameState.gameCode}</span></p>
           {progress && <p className="text-base text-amber-700 mb-2">{progress}</p>}
           <p className="text-sm text-amber-900 mb-1">{totalOwned} territories owned</p>
           <div className="space-y-1">

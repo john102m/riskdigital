@@ -13,7 +13,7 @@ builder.Services.AddSignalR()
     {
         options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
-builder.Services.AddSingleton<GameService>();
+builder.Services.AddSingleton<GameManager>();
 builder.Services.AddSingleton<AiService>();
 builder.Services.AddSingleton<MlModels>();
 builder.Services.AddSingleton<ActionLogger>();
