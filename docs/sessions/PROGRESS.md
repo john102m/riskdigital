@@ -1073,3 +1073,199 @@ Major polish pass ahead of tomorrow's playtest. New map, soundtrack system, timi
   3. Handset should show a brief notification: "Your target was eliminated — mission changed to world domination."
 - **To test:** Use debug mode — set up a 3-player game, give one player "Eliminate Blue", then have the other player kill Blue. Check if mission updates.
 - **Server code:** `GameService.Combat.cs` → `MoveAfterCapture` — the `FallenBackToWorldDomination` flag is already SET in the loop, but `MissionUpdated` is never sent to the affected player.
+
+---
+
+## 2026-07-04 — Playtest Day: Bugfixes, Card UI, Placement Modes
+
+### Summary
+First human playtest (non-Risk player). Major UX session — replaced alerts, overhauled card trade, fixed bot wins, added dice audit logging, implemented placement modes.
+
+### Bugs Fixed
+
+- **Mission fallback not notified** — `MissionUpdated` now sent to player when someone else kills their elimination target. Toast notification on handset.
+- **Bot win not shown on Unity board** — `MissionComplete` event wasn't broadcast from `AiService.MoveAfterCapture`. Fixed all 5 call sites.
+- **Card trade white screen crash** — `selected` indices went stale when `cards` array shrank after trade. Added `useEffect` to clear selection + bounds guard.
+- **TurnNumber always 0 in logs** — was writing `CardTradeCount`. Added `TurnNumber` to `GameState`, incremented in `EndTurn`.
+- **`/admin/gameover` no ceremony** — now broadcasts `MissionComplete` + `AllMissionsRevealed` + state update.
+- **Escaped dice positioned wrong** — teleported to spawn point (high up) instead of arena floor. Added `arenaFloor` field, defaults to `lookTarget` position.
+
+### UX Improvements
+
+- **Card trade overlay** — full-screen 2-column grid replaces cramped inline panel. Large touch targets, trade value preview ("Trade → +10 armies"), error clears on selection change.
+- **Toast notifications** — replaced all 14 `alert()` calls. Centred, auto-dismiss 3s, strips HubException noise to friendly messages.
+- **Confirm skip attack** — inline two-button pattern ("Cancel" / "Skip Attack") replaces native `confirm()`.
+- **Lobby layout** — `h-dvh` flex, pinned Start button, shortened tier labels (T1–T5 on one row), scrollable content.
+- **Game code** — removed "Game Code" label, just shows the code. Nudged up.
+- **Activity feed padding** — bottom entry no longer clipped (increased per-line height + panel padding).
+
+### New Features
+
+- **Placement modes** — Auto (instant, scored algorithm), Free-for-all (simultaneous, bots stagger), Manual (legacy turn-order). Tap-to-cycle button in lobby. Smart default (all bots → Auto, humans → Free).
+- **All missions revealed on game over** — `AllMissionsRevealed` broadcast, Unity activity feed shows all players' missions with widened panel.
+- **Dice audit logger** — logs every die value (server PRNG vs Unity physics) to `dice-audit.csv` for long-term fairness analysis.
+- **Idle drift camera** — board camera drifts after 15s inactivity, resets on any state change. Only when zoomed out.
+- **Camera mid-flight snap** — prevents confused lerp when rapid zoom in/out during fast bot play.
+
+### Docs Created
+
+- `docs/ai/DICE-FAIRNESS-ANALYSIS.md` — how to analyse dice data
+- `docs/proposals/PROPOSAL-IDLE-DRIFT.md` — idle drift design
+- `docs/proposals/PROPOSAL-MISSION-FALLBACK-AND-CARD-UI.md` — card UI + fallback fix
+- `docs/proposals/PROPOSAL-PROGRESSIVE-DISCLOSURE.md` — newbie onboarding options
+- `docs/proposals/PROPOSAL-PLACEMENT-MODES.md` — placement modes design + implementation plan
+- `docs/THE-STORY-SO-FAR.md` — full project narrative
+- `docs/INDEX.md` — updated with all current docs
+- `README.md` — updated
+
+### Files Changed (Server)
+
+- `Models/GameState.cs` — `PlacementMode` enum, `TurnNumber`, `HouseRules.PlacementMode`
+- `Services/GameService.cs` — `AutoPlaceArmies()`, `ScorePlacementTarget()`, FFA `PlaceArmy`, `StartGame` mode branching, `RollDice` audit logging, `SubmitDiceResult` audit
+- `Services/GameService.Combat.cs` — `MoveAfterCapture` returns fallback players
+- `Services/GameService.Turn.cs` — `TurnNumber++` in `EndTurn`
+- `Services/AiService.cs` — FFA bot placement (parallel trigger, stagger), bot win broadcast
+- `Services/ActionLogger.cs` — `TurnNumber` instead of `CardTradeCount`
+- `Services/DiceAuditLogger.cs` — new
+- `Hubs/GameHub.cs` — mission fallback sends, `AllMissionsRevealed`, `StartGame` accepts mode
+- `EndPointConfig/ManagementEndpoints.cs` — `/admin/gameover` full ceremony
+- `Program.cs` — `DiceAuditLogger` DI registration
+
+### Files Changed (Handset)
+
+- `components/CardTradeOverlay.tsx` — new (full-screen trade UI)
+- `components/Toast.tsx` — new (centred, friendly messages)
+- `components/LobbyScreen.tsx` — layout overhaul, placement mode toggle
+- `components/ReinforceScreen.tsx` — uses overlay instead of inline panel
+- `components/AttackScreen.tsx` — overlay for forced trade, confirm skip, toast
+- `components/PlacementScreen.tsx` — FFA mode (no waiting screen)
+- `components/FortifyScreen.tsx` — toast prop
+- `components/ConnectScreen.tsx` — optional toast prop
+- `hooks/useConnection.ts` — mission fallback toast
+- `types/game.ts` — `HouseRules` interface
+- `App.tsx` — toast state, mission toast
+
+### Files Changed (Unity)
+
+- `Scripts/BoardCamera.cs` — idle drift, mid-flight snap, `ResetIdle()`
+- `Scripts/UIOverlay.cs` — `AllMissionsRevealed` handler, feed padding, widened panel, cached `boardCamera`
+- `Scripts/SignalRClient.cs` — `OnAllMissionsRevealed` event
+- `Scripts/DiceRoller.cs` — `arenaFloor` field for escaped dice positioning
+
+### Playtest Notes
+
+- First human tester (non-Risk player): handset "a bit busy, necessarily" but board UX good
+- Found herself playing to win rather than test — game is done
+- "What was the bot's mission?" → led to mission reveal feature
+- Game taken for granted (no "wow" at the tech) — highest UX compliment
+
+*Updated: 2026-07-05 00:13*
+
+### Reminder (next session)
+
+- Drill down on `UIOverlay.cs` — how it came about, why it builds the entire UI from code at runtime, whether it should stay monolithic or get split. The story of no-prefabs Unity UI.
+
+---
+
+## 2026-07-05 — Popup System Overhaul, Board Polish, Multi-Household Proposal
+
+### Summary
+Major session: rebuilt popup system from code-generated to scene-designed, added blitz/card trade/win popups with parchment scroll unroll animation, refactored UIOverlay, and designed multi-household Unity board solution.
+
+### Completed
+
+**Popup System (Scene-Designed)**
+- Converted from code-generated world-space canvas to scene-designed Screen Space Overlay
+- Three popup panels: Turn (player name), Blitz (stats), Card Trade (player + armies)
+- Win panel added (bigger, trophy icon, 30s hold)
+- Parchment scroll background (9-slice) on all panels
+- Scroll unroll/roll-up animation (width animates, ease-out curve)
+- Text + icon hidden before roll-up for clean close
+- Sound on unroll (shared `unrollClip`)
+- Dynamic width sizing based on text content (GetPreferredValues + padding)
+- `gameOver` flag prevents other popups stomping the win screen
+
+**Refactoring**
+- Extracted `PopupManager.cs` (152 lines) — shared `ShowScroll()` method, all animation in one place
+- Extracted `TerritoryNames.cs` (32 lines) — static short name dictionary
+- Extracted `MissionReveal.cs` (7 lines) — deserialization class
+- UIOverlay.cs reduced from 921 to ~680 lines
+- Tracking fields grouped at top of file (were scattered mid-file)
+
+**Board Visuals**
+- Cinzel serif font on territory labels, army counts, activity feed, info bar
+- Bold black army count numbers
+- Drop shadow on territory name labels
+- Parchment background on activity feed (9-slice, sliced sprite)
+- Dark brown bold text on feed
+- Font applied to info bar (player name + game code)
+
+**Blitz Popup**
+- Added `totalAttackerLosses` and `totalDefenderLosses` to Unity `BlitzResultDTO`
+- 3.5s delay before showing (waits for dice arena camera fly)
+- Lightning bolt sprite icon (TMP Sprite Asset)
+- Stats: rounds, lost, won with red/green colouring
+
+**Other Fixes**
+- Activity feed width calculates dynamically for mission reveal (measures longest text)
+- Feed width resets on turn change and new game
+- Fortify sound added (`fortifyClip` field on UIOverlay)
+- Escaped dice repositioned (arenaFloor set to box lid floor)
+- WHUK deploy tested (stale state issue — `/admin/reset` fixed it)
+
+**Docs Created**
+- `docs/unity/PROPOSAL-BOARD-POLISH.md` — token height scaling, aura, capture effects, phase lighting
+- `docs/unity/PROPOSAL-BLITZ-POPUP.md` — original blitz popup design (superseded by scroll approach)
+- `docs/unity/PROPOSAL-BLITZ-RESULT-FLASH.md` — initial blitz flash options
+- `docs/unity/BLITZ-POPUP-LAYOUT.md` — layout spec (superseded)
+- `docs/proposals/PROPOSAL-MULTI-HOUSEHOLD-TV.md` — full multi-household Unity board solution (A2 recommended)
+
+**Multi-Household TV Design (A2 — Each Household Rolls Their Own)**
+- Each household's TV rolls their own dice with live physics
+- Other household sees dice arrive statically (blitz placement method)
+- Both arenas end up showing identical final state
+- Server routes SpawnDice by household, new AttackerDiceResult/DefenderDiceResult events
+- Bot combat stays local (live physics on the human's TV)
+- Backward compatible: single TV = no change from today
+- Household assignment via auto-detect IP or lobby picker
+
+### Files Created
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\PopupManager.cs`
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\TerritoryNames.cs`
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\MissionReveal.cs`
+- `docs/unity/PROPOSAL-BOARD-POLISH.md`
+- `docs/unity/PROPOSAL-BLITZ-POPUP.md`
+- `docs/unity/PROPOSAL-BLITZ-RESULT-FLASH.md`
+- `docs/unity/BLITZ-POPUP-LAYOUT.md`
+- `docs/proposals/PROPOSAL-MULTI-HOUSEHOLD-TV.md`
+
+### Files Modified
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\UIOverlay.cs` — major refactor, popup extraction, feed styling
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` — BlitzResultDTO fields added
+- `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\BoardRenderer.cs` — labelFont field, bold numbers, black colour, shadow toggle
+
+### Design Decisions
+- Scene-designed UI over code-generated (lesson learned: design visually, wire in code)
+- One canvas, multiple panels (show/hide the right one)
+- Parchment scroll aesthetic for all popups (matches game theme)
+- Unroll animation > scale-bounce (more thematic for the scroll)
+- Multi-household: A2 (each rolls their own) is the winning solution
+- Static dice placement for remote household (reuses blitz display technique)
+- Backward compatible — single TV mode unchanged
+
+### Tomorrow: Pick Up From
+1. Branch `feature/multi-household-tv` (if pursuing)
+2. Test 1: single TV backward compat
+3. Test 2: Z440 + laptop, two Unity instances, different householdIds
+4. Or: continue board polish (token height scaling from PROPOSAL-BOARD-POLISH.md)
+5. Or: convert info bar + welcome screen to scene-designed (option 2 from refactoring)
+
+### Dice Audit Results (from WHUK)
+- 4,695 total rolls (4,285 server, 410 Unity physics)
+- All faces within 1% of expected (16.7%)
+- Attacker average: 3.53, Defender average: 3.52
+- Verdict: dice are fair, no bias
+
+---
+
+*Updated: 2026-07-05 23:50*

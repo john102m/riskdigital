@@ -37,11 +37,14 @@ public class GameState
     public HouseRules HouseRules { get; set; } = new();
 }
 
+public enum PlacementMode { Auto, FreeForAll, Manual }
+
 public class HouseRules
 {
     public bool LockedAttackFront { get; set; } = true;
     public bool UseMissions { get; set; } = true;
     public bool FixedCardValues { get; set; } = true;
+    public PlacementMode PlacementMode { get; set; } = PlacementMode.Auto;
 }
 
 public enum MissionType { ContinentConquest, TerritoryCount, Elimination }

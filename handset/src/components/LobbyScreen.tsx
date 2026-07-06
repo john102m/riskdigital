@@ -16,9 +16,18 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
   const isHost = gameState.players.find((p) => p.name === playerName)?.isHost;
   const [showT5, setShowT5] = useState(false);
 
+  // Smart default: all bots → Auto, any humans → Free
+  const allBots = gameState.players.filter(p => !p.isHost).every(p => p.isAI);
+  const [placementMode, setPlacementMode] = useState<"Auto" | "FreeForAll" | "Manual">(allBots ? "Auto" : "FreeForAll");
+
+  const placementLabels = { Auto: "🚀 Auto", FreeForAll: "🤝 Free", Manual: "📋 Manual" };
+  const cyclePlacement = () => {
+    setPlacementMode(m => m === "Auto" ? "FreeForAll" : m === "FreeForAll" ? "Manual" : "Auto");
+  };
+
   const startGame = async () => {
     try {
-      await connection.invoke("StartGame");
+      await connection.invoke("StartGame", placementMode);
     } catch (e: any) {
       showToast(e.message);
     }
@@ -70,6 +79,19 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
               ? "Waiting for 1 more player..."
               : `${gameState.players.length} players — ready to conquer 🌍`}
           </p>
+
+          {/* Placement mode toggle */}
+          <div className="mt-3 flex justify-center">
+            {isHost ? (
+              <button onClick={cyclePlacement} className="px-4 py-2 rounded-full bg-gray-800 border border-white/10 text-sm font-medium active:bg-gray-700 touch-manipulation">
+                {placementLabels[placementMode]}
+              </button>
+            ) : (
+              <span className="px-4 py-2 rounded-full bg-gray-800/50 border border-white/10 text-sm text-gray-400">
+                {placementLabels[placementMode]}
+              </span>
+            )}
+          </div>
 
           {/* AI tier buttons */}
           {isHost && gameState.players.length < 6 && (

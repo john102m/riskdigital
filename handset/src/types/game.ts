@@ -41,6 +41,14 @@ export interface GameState {
   lastDiceCount: number;
   pendingMoveSource: number | null;
   pendingMoveTarget: number | null;
+  houseRules: HouseRules;
+}
+
+export interface HouseRules {
+  lockedAttackFront: boolean;
+  useMissions: boolean;
+  fixedCardValues: boolean;
+  placementMode: "Auto" | "FreeForAll" | "Manual";
 }
 
 export interface CombatResult {
