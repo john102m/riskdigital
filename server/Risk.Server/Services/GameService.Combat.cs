@@ -137,7 +137,6 @@ public partial class GameService
             System.Diagnostics.Debug.WriteLine($"[DICE] Same-household: both on {(_registeredTVs.FirstOrDefault(t => t.ConnectionId == attackerTvConn)?.HouseholdId ?? "?")}");
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
-            _pending.AttackerRoll.TrySetResult(diceCount);
             _pending.DefenderRoll.TrySetResult(defenderDiceCount);
 
             // Wait for combined result (15s timeout)
@@ -164,7 +163,6 @@ public partial class GameService
         // Server waits for both authoritative submissions in parallel.
         System.Diagnostics.Debug.WriteLine($"[DICE] Parallel spawn: attacker + defender → group");
         await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
-        _pending.AttackerRoll.TrySetResult(diceCount);
 
         if (defenderPlayer.IsAI)
         {

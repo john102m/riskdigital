@@ -193,7 +193,17 @@ public class GameHub : Hub
 
         _logger.LogInformation("DICE: Attack started src={Src} tgt={Tgt} dice={Dice}", sourceId, targetId, diceCount);
         await GameGroup(gameCode).SendAsync("CombatStarted");
-        var (state, result) = await game.AttackWithDice(_hubContext, gameCode, Context.ConnectionId, sourceId, targetId, diceCount);
+
+        GameState state;
+        CombatResult result;
+        try
+        {
+            (state, result) = await game.AttackWithDice(_hubContext, gameCode, Context.ConnectionId, sourceId, targetId, diceCount);
+        }
+        finally
+        {
+            game.ClearPending(); // safe even if already null — prevents stuck "Combat in progress"
+        }
 
         _logger.LogInformation("DICE: AttackWithDice returned, broadcasting CombatResult");
         await GameGroup(gameCode).SendAsync("CombatResult", result);

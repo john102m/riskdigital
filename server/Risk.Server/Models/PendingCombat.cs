@@ -14,12 +14,8 @@
         public int DefenderDiceCount { get; set; }
         public int AttackerPlayerIndex { get; init; }
         public int DefenderPlayerIndex { get; init; }
-        public TaskCompletionSource<int> AttackerRoll { get; } = new();
         public TaskCompletionSource<int> DefenderRoll { get; } = new();
         public TaskCompletionSource<(int[] AttackerDice, int[] DefenderDice)> DiceResult { get; } = new();
-
-        /// <summary>Fires when attacker TV submits its dice values (triggers defender spawn).</summary>
-        public TaskCompletionSource<int[]> AttackerSubmitted { get; } = new();
 
         private int[]? _attackerDice;
         private int[]? _defenderDice;
@@ -32,7 +28,6 @@
         public void SubmitAttackerDice(int[] dice)
         {
             _attackerDice = dice;
-            AttackerSubmitted.TrySetResult(dice);
             TryComplete();
         }
 
