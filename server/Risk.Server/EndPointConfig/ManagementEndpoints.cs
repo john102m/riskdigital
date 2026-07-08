@@ -259,5 +259,251 @@ public static class ManagementEndpoints
         {
             return Results.Text(string.Join("\n", ring.GetLines()), "text/plain");
         });
+
+        admin.MapGet("/testcombat", async (int attacker, int defender, int? dice, string? gameCode, bool? human,
+            GameManager manager, IHubContext<GameHub> hub, ILogger<GameManager> logger) =>
+        {
+            // Find game
+            GameService? game = null;
+            string? code = gameCode;
+            if (code is not null)
+                game = manager.GetGame(code);
+            else
+            {
+                var games = manager.GetAllGames();
+                if (games.Count == 1) { code = games.Keys.First(); game = games.Values.First(); }
+            }
+            if (game?.State is null) return Results.BadRequest("No game found");
+            var state = game.State;
+
+            if (attacker < 0 || attacker >= state.Players.Count || defender < 0 || defender >= state.Players.Count)
+                return Results.BadRequest($"Player index out of range (0–{state.Players.Count - 1})");
+            if (attacker == defender)
+                return Results.BadRequest("Attacker and defender must be different");
+
+            // Find any adjacent territory pair between these players (ignore army counts)
+            int sourceId = -1, targetId = -1;
+            foreach (var t in state.Territories.Where(t => t.OwnerId == attacker))
+            {
+                var adjId = t.Adjacent.FirstOrDefault(a => state.Territories.First(x => x.Id == a).OwnerId == defender);
+                if (adjId != default || t.Adjacent.Any(a => state.Territories.First(x => x.Id == a).OwnerId == defender))
+                {
+                    sourceId = t.Id;
+                    targetId = t.Adjacent.First(a => state.Territories.First(x => x.Id == a).OwnerId == defender);
+                    break;
+                }
+            }
+            if (sourceId == -1)
+                return Results.BadRequest($"No adjacent territories between player {attacker} and player {defender}");
+
+            int diceCount = dice ?? 3;
+            var source = state.Territories.First(t => t.Id == sourceId);
+            var target = state.Territories.First(t => t.Id == targetId);
+            var attackerPlayer = state.Players[attacker];
+            var connId = attackerPlayer.ConnectionId ?? "test";
+
+            // ─── Snapshot state to restore after test ─────────────────────────
+            var prevPhase = state.TurnPhase;
+            var prevPlayerIndex = state.CurrentPlayerIndex;
+            var prevSourceArmies = source.Armies;
+            var prevTargetArmies = target.Armies;
+            var prevSourceOwner = source.OwnerId;
+            var prevTargetOwner = target.OwnerId;
+            var prevPendingMoveSource = state.PendingMoveSource;
+            var prevPendingMoveTarget = state.PendingMoveTarget;
+            var prevEarnedCard = attackerPlayer.EarnedCardThisTurn;
+            var prevAttackFront = state.AttackFrontIds.ToList();
+            var defenderPlayer = state.Players[defender];
+            var prevDefenderIsAI = defenderPlayer.IsAI;
+
+            // ─── Force valid state for combat ─────────────────────────────────
+            state.TurnPhase = Risk.Server.Models.TurnPhase.Attack;
+            state.CurrentPlayerIndex = attacker;
+            if (source.Armies <= diceCount)
+                source.Armies = diceCount + 1; // ensure enough to attack
+            if (target.Armies < 1)
+                target.Armies = 2; // ensure there's something to defend
+            defenderPlayer.IsAI = human == true ? prevDefenderIsAI : true; // force auto-roll unless &human=true
+
+            logger.LogInformation("TESTCOMBAT: player {Attacker} ({AName}) → player {Defender} ({DName}), src={Src} tgt={Tgt} dice={Dice}",
+                attacker, attackerPlayer.Name, defender, state.Players[defender].Name, sourceId, targetId, diceCount);
+
+            try
+            {
+                // Let TVs know which territories are fighting before dice spawn
+                await hub.Clients.Group(code!).SendAsync("AttackSelection", sourceId, targetId);
+                await Task.Delay(300);
+
+                object result;
+                if (game.IsUnityTVConnected)
+                {
+                    var r = await game.AttackWithDice(hub, code!, connId, sourceId, targetId, diceCount);
+                    await Task.Delay(5000); // Let TVs finish dice display before CombatResult resets arena
+                    await hub.Clients.Group(code!).SendAsync("CombatResult", r.Result);
+                    result = new { status = "resolved", r.Result.Captured, r.Result.AttackerDice, r.Result.DefenderDice, sourceId, targetId };
+                }
+                else
+                {
+                    var r = game.Attack(connId, sourceId, targetId, diceCount);
+                    await hub.Clients.Group(code!).SendAsync("CombatResult", r.Result);
+                    result = new { status = "resolved (server roll)", r.Result.Captured, r.Result.AttackerDice, r.Result.DefenderDice, sourceId, targetId };
+                }
+
+                // ─── Restore state (non-destructive) ──────────────────────────
+                state.TurnPhase = prevPhase;
+                state.CurrentPlayerIndex = prevPlayerIndex;
+                source.Armies = prevSourceArmies;
+                source.OwnerId = prevSourceOwner;
+                target.Armies = prevTargetArmies;
+                target.OwnerId = prevTargetOwner;
+                state.PendingMoveSource = prevPendingMoveSource;
+                state.PendingMoveTarget = prevPendingMoveTarget;
+                attackerPlayer.EarnedCardThisTurn = prevEarnedCard;
+                state.AttackFrontIds.Clear();
+                state.AttackFrontIds.AddRange(prevAttackFront);
+                defenderPlayer.IsAI = prevDefenderIsAI;
+
+                // Broadcast restored state so handsets/TVs don't show stale data
+                await hub.Clients.Group(code!).SendAsync("GameStateUpdated", state);
+
+                return Results.Ok(result);
+            }
+            catch (Exception ex)
+            {
+                // Restore on failure too
+                game.ClearPending();
+                state.TurnPhase = prevPhase;
+                state.CurrentPlayerIndex = prevPlayerIndex;
+                source.Armies = prevSourceArmies;
+                source.OwnerId = prevSourceOwner;
+                target.Armies = prevTargetArmies;
+                target.OwnerId = prevTargetOwner;
+                state.PendingMoveSource = prevPendingMoveSource;
+                state.PendingMoveTarget = prevPendingMoveTarget;
+                attackerPlayer.EarnedCardThisTurn = prevEarnedCard;
+                state.AttackFrontIds.Clear();
+                state.AttackFrontIds.AddRange(prevAttackFront);
+                defenderPlayer.IsAI = prevDefenderIsAI;
+                await hub.Clients.Group(code!).SendAsync("GameStateUpdated", state);
+
+                logger.LogError(ex, "TESTCOMBAT failed");
+                return Results.Ok(new { status = "error", message = ex.Message, stack = ex.StackTrace });
+            }
+        });
+
+        admin.MapGet("/testblitz", async (int attacker, int defender, string? gameCode,
+            GameManager manager, IHubContext<GameHub> hub, ILogger<GameManager> logger) =>
+        {
+            // Find game
+            GameService? game = null;
+            string? code = gameCode;
+            if (code is not null)
+                game = manager.GetGame(code);
+            else
+            {
+                var games = manager.GetAllGames();
+                if (games.Count == 1) { code = games.Keys.First(); game = games.Values.First(); }
+            }
+            if (game?.State is null) return Results.BadRequest("No game found");
+            var state = game.State;
+
+            if (attacker < 0 || attacker >= state.Players.Count || defender < 0 || defender >= state.Players.Count)
+                return Results.BadRequest($"Player index out of range (0–{state.Players.Count - 1})");
+            if (attacker == defender)
+                return Results.BadRequest("Attacker and defender must be different");
+
+            // Find any adjacent territory pair between these players
+            int sourceId = -1, targetId = -1;
+            foreach (var t in state.Territories.Where(t => t.OwnerId == attacker))
+            {
+                var adjEnemy = t.Adjacent.FirstOrDefault(a => state.Territories.First(x => x.Id == a).OwnerId == defender);
+                if (adjEnemy != default)
+                {
+                    sourceId = t.Id;
+                    targetId = adjEnemy;
+                    break;
+                }
+            }
+            if (sourceId == -1)
+                return Results.BadRequest($"No adjacent territories between player {attacker} and player {defender}");
+
+            var source = state.Territories.First(t => t.Id == sourceId);
+            var target = state.Territories.First(t => t.Id == targetId);
+            var attackerPlayer = state.Players[attacker];
+            var connId = attackerPlayer.ConnectionId ?? "test";
+
+            // ─── Snapshot state ───────────────────────────────────────────────
+            var prevPhase = state.TurnPhase;
+            var prevPlayerIndex = state.CurrentPlayerIndex;
+            var prevSourceArmies = source.Armies;
+            var prevTargetArmies = target.Armies;
+            var prevSourceOwner = source.OwnerId;
+            var prevTargetOwner = target.OwnerId;
+            var prevPendingMoveSource = state.PendingMoveSource;
+            var prevPendingMoveTarget = state.PendingMoveTarget;
+            var prevEarnedCard = attackerPlayer.EarnedCardThisTurn;
+            var prevAttackFront = state.AttackFrontIds.ToList();
+
+            // ─── Force valid state for blitz ──────────────────────────────────
+            state.TurnPhase = Risk.Server.Models.TurnPhase.Attack;
+            state.CurrentPlayerIndex = attacker;
+            if (source.Armies < 5) source.Armies = 10; // ensure enough armies for a meaningful blitz
+            if (target.Armies < 3) target.Armies = 5;
+            state.AttackFrontIds.Clear(); // clear locked front so blitz isn't rejected
+
+            logger.LogInformation("TESTBLITZ: player {Attacker} ({AName}) → player {Defender} ({DName}), src={Src} tgt={Tgt}",
+                attacker, attackerPlayer.Name, defender, state.Players[defender].Name, sourceId, targetId);
+
+            try
+            {
+                // Let TVs know which territories are fighting (triggers camera zoom + sets source/target for blitz display)
+                await hub.Clients.Group(code!).SendAsync("AttackSelection", sourceId, targetId);
+                await Task.Delay(300); // brief pause for TVs to process before BlitzResult arrives
+
+                var (_, result) = game.Blitz(connId, sourceId, targetId);
+                await hub.Clients.Group(code!).SendAsync("BlitzResult", result);
+
+                // Wait for TVs to finish the blitz display before restoring state
+                // (OnStateChanged kills the arena if turnPhase leaves Attack)
+                await Task.Delay(5000);
+
+                // ─── Restore state ────────────────────────────────────────────
+                state.TurnPhase = prevPhase;
+                state.CurrentPlayerIndex = prevPlayerIndex;
+                source.Armies = prevSourceArmies;
+                source.OwnerId = prevSourceOwner;
+                target.Armies = prevTargetArmies;
+                target.OwnerId = prevTargetOwner;
+                state.PendingMoveSource = prevPendingMoveSource;
+                state.PendingMoveTarget = prevPendingMoveTarget;
+                attackerPlayer.EarnedCardThisTurn = prevEarnedCard;
+                state.AttackFrontIds.Clear();
+                state.AttackFrontIds.AddRange(prevAttackFront);
+
+                await hub.Clients.Group(code!).SendAsync("GameStateUpdated", state);
+
+                return Results.Ok(new { status = "resolved", result.Captured, result.Rounds,
+                    result.TotalAttackerLosses, result.TotalDefenderLosses,
+                    result.FinalAttackerDice, result.FinalDefenderDice, sourceId, targetId });
+            }
+            catch (Exception ex)
+            {
+                state.TurnPhase = prevPhase;
+                state.CurrentPlayerIndex = prevPlayerIndex;
+                source.Armies = prevSourceArmies;
+                source.OwnerId = prevSourceOwner;
+                target.Armies = prevTargetArmies;
+                target.OwnerId = prevTargetOwner;
+                state.PendingMoveSource = prevPendingMoveSource;
+                state.PendingMoveTarget = prevPendingMoveTarget;
+                attackerPlayer.EarnedCardThisTurn = prevEarnedCard;
+                state.AttackFrontIds.Clear();
+                state.AttackFrontIds.AddRange(prevAttackFront);
+                await hub.Clients.Group(code!).SendAsync("GameStateUpdated", state);
+
+                logger.LogError(ex, "TESTBLITZ failed");
+                return Results.Ok(new { status = "error", message = ex.Message, stack = ex.StackTrace });
+            }
+        });
     }
 }

@@ -191,9 +191,11 @@ public class GameHub : Hub
         var (game, gameCode) = GetCallerGame();
         _log.LogAttack(game.State!, game.State!.CurrentPlayerIndex, sourceId, targetId, false);
 
+        _logger.LogInformation("DICE: Attack started src={Src} tgt={Tgt} dice={Dice}", sourceId, targetId, diceCount);
         await GameGroup(gameCode).SendAsync("CombatStarted");
         var (state, result) = await game.AttackWithDice(_hubContext, gameCode, Context.ConnectionId, sourceId, targetId, diceCount);
 
+        _logger.LogInformation("DICE: AttackWithDice returned, broadcasting CombatResult");
         await GameGroup(gameCode).SendAsync("CombatResult", result);
         await BroadcastState(state, gameCode);
         await GameGroup(gameCode).SendAsync("CombatResolved");
@@ -347,16 +349,22 @@ public class GameHub : Hub
 
     public async Task RegisterAsTV(string gameCode)
     {
-        await RegisterAsTVInternal(gameCode);
+        await RegisterAsTVInternal(gameCode, null, null);
     }
 
     // Called by Unity with no args (backward compat) — auto-detect game
     public async Task RegisterTV()
     {
-        await RegisterAsTVInternal("");
+        await RegisterAsTVInternal("", null, null);
     }
 
-    private async Task RegisterAsTVInternal(string gameCode)
+    /// <summary>Register as TV with household assignment (multi-household mode).</summary>
+    public async Task RegisterAsTVWithHousehold(string gameCode, string householdId, int[] playerIndices)
+    {
+        await RegisterAsTVInternal(gameCode, householdId, playerIndices);
+    }
+
+    private async Task RegisterAsTVInternal(string gameCode, string? householdId, int[]? playerIndices)
     {
         try
         {
@@ -379,10 +387,10 @@ public class GameHub : Hub
             }
 
             var g = _manager.GetGame(code!)!;
-            g.RegisterAsTV(Context.ConnectionId);
+            g.RegisterAsTV(Context.ConnectionId, householdId, playerIndices);
             _manager.TrackConnection(Context.ConnectionId, code!);
             await Groups.AddToGroupAsync(Context.ConnectionId, code!);
-            _logger.LogInformation("RegisterAsTV: success, code={Code}", code);
+            _logger.LogInformation("RegisterAsTV: success, code={Code}, household={Household}", code, householdId ?? "(none)");
         }
         catch (Exception ex)
         {
@@ -391,10 +399,40 @@ public class GameHub : Hub
         }
     }
 
-    public void SubmitDiceResult(int[] attackerDice, int[] defenderDice)
+    /// <summary>Legacy: TV submits both attacker and defender dice (single TV mode).</summary>
+    public async Task SubmitDiceResult(int[] attackerDice, int[] defenderDice)
     {
         var game = _manager.GetGameByConnection(Context.ConnectionId);
-        game?.SubmitDiceResult(attackerDice, defenderDice);
+        var gameCode = _manager.GetGameCode(Context.ConnectionId);
+        if (game == null || gameCode == null) return;
+
+        game.SubmitDiceResult(attackerDice, defenderDice);
+
+        // Broadcast to all TVs so remote households can place statically
+        if (attackerDice.Length > 0)
+            await GameGroup(gameCode).SendAsync("AttackerDiceResult", attackerDice);
+        if (defenderDice.Length > 0)
+            await GameGroup(gameCode).SendAsync("DefenderDiceResult", defenderDice);
+    }
+
+    /// <summary>Multi-household: TV submits only its own dice (attacker OR defender).</summary>
+    public Task SubmitRolledDice(string role, int[] dice)
+    {
+        var game = _manager.GetGameByConnection(Context.ConnectionId);
+        var gameCode = _manager.GetGameCode(Context.ConnectionId);
+        if (game == null || gameCode == null) { _logger.LogInformation("DICE: SubmitRolledDice({Role}) game/code null!", role); return Task.CompletedTask; }
+
+        var pending = game.GetPending();
+        if (pending == null) { _logger.LogInformation("DICE: SubmitRolledDice({Role}) pending is null (timed out?)", role); return Task.CompletedTask; }
+
+        _logger.LogInformation("DICE: SubmitRolledDice({Role}): [{Values}]", role, string.Join(",", dice));
+
+        if (role == "attacker")
+            pending.SubmitAttackerDice(dice);
+        else if (role == "defender")
+            pending.SubmitDefenderDice(dice);
+
+        return Task.CompletedTask;
     }
 
     public async Task GetActiveGames()

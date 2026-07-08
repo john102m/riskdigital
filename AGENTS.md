@@ -5,7 +5,7 @@ Digital adaptation of the classic Risk board game. .NET 8 SignalR server, React/
 
 ## Key Principles
 - **DO NOT modify code directly.** All code changes must be written as a proposal doc first (explain what, where, and why) for human review and approval before any file is touched.
-- **DO NOT run .NET CLI commands** (dotnet build, dotnet publish, dotnet run). VS2022 handles all .NET builds.
+- **DO NOT run .NET CLI commands** (dotnet build, dotnet publish, dotnet run). VS2026 handles all .NET builds.
 - **DO NOT run builds or deploys** without explicit permission.
 - Game logic lives ONLY on the server. Clients are dumb renderers/controllers.
 - Territory indices 0–41 used consistently across all components.

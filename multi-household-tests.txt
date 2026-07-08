@@ -1,0 +1,24 @@
+ #1 /admin/testcombat?attacker=0&defender=2&dice=3    you → bob (cross-household)
+ #2 /admin/testcombat?attacker=2&defender=0&dice=3    bob → you (cross-household)
+ #3 /admin/testcombat?attacker=0&defender=1&dice=3    you → alice (same-household)
+ #4 /admin/testcombat?attacker=1&defender=2&dice=3    alice → bob (bot-vs-bot cross)
+ 
+ attacker = z440  defender = laptop
+ 
+  #1 /admin/testcombat?attacker=0&defender=2&dice=3    you → bob (cross-household)
+  
+  test roll 1 - works as expected - (attacker arena dismissed a bit quick)
+  
+  {"status":"error","message":"Not in attack phase.","stack":"   at Risk.Server.Services.GameService.ResolveCombat(String connectionId, Int32 sourceId, Int32 targetId, Int32[] attackerDice, Int32[] defenderDice) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 221\r\n   at Risk.Server.Services.GameService.AttackWithDice(IHubContext`1 hub, String gameCode, String connectionId, Int32 sourceId, Int32 targetId, Int32 diceCount) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 194\r\n   at Risk.Server.EndPointConfig.ManagementEndpoints.<>c.<<MapManagementEndpoints>b__0_14>d.MoveNext() in D:\\Development\\RiskDigital\\server\\Risk.Server\\EndPointConfig\\ManagementEndpoints.cs:line 315"}
+  
+  test roll 2 - attacker test arena dissappears  too soon - brief flash of attacker dice
+  
+  {"status":"error","message":"Not in attack phase.","stack":"   at Risk.Server.Services.GameService.ResolveCombat(String connectionId, Int32 sourceId, Int32 targetId, Int32[] attackerDice, Int32[] defenderDice) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 221\r\n   at Risk.Server.Services.GameService.AttackWithDice(IHubContext`1 hub, String gameCode, String connectionId, Int32 sourceId, Int32 targetId, Int32 diceCount) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 194\r\n   at Risk.Server.EndPointConfig.ManagementEndpoints.<>c.<<MapManagementEndpoints>b__0_14>d.MoveNext() in D:\\Development\\RiskDigital\\server\\Risk.Server\\EndPointConfig\\ManagementEndpoints.cs:line 315"}
+  
+  test roll 3 as above but another arena swings in for the defenders placed dice (2 arenas on sam display - probs wha twas happening at #2 but i looked away)
+  
+  {"status":"error","message":"Not in attack phase.","stack":"   at Risk.Server.Services.GameService.ResolveCombat(String connectionId, Int32 sourceId, Int32 targetId, Int32[] attackerDice, Int32[] defenderDice) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 221\r\n   at Risk.Server.Services.GameService.AttackWithDice(IHubContext`1 hub, String gameCode, String connectionId, Int32 sourceId, Int32 targetId, Int32 diceCount) in D:\\Development\\RiskDigital\\server\\Risk.Server\\Services\\GameService.Combat.cs:line 194\r\n   at Risk.Server.EndPointConfig.ManagementEndpoints.<>c.<<MapManagementEndpoints>b__0_14>d.MoveNext() in D:\\Development\\RiskDigital\\server\\Risk.Server\\EndPointConfig\\ManagementEndpoints.cs:line 315"}
+  
+  test 4 confirmed as above 2 arena swings in for attacker roll then disappears then instead of defender dice being placed on it it disappears and then a new arena appears in its place with only the defender dice, confirmed all tests correct beaviour for defender bot : rolls into a swinging arena with attacker dice already visible
+  
+  confirmed on subsewuent tests repetable - attacker sees own dice roll on swinging arena - it then disappears and a new arena appears with only the defender result. 

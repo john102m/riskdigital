@@ -4,7 +4,7 @@ using Risk.Server.Models;
 
 namespace Risk.Server.Services;
 
-public class AiService(IHubContext<GameHub> hub, MlModels ml)
+public class AiService(IHubContext<GameHub> hub, MlModels ml, ILogger<AiService> logger)
 {
     private static readonly AsyncLocal<GameService> _game = new();
     private static readonly AsyncLocal<string> _gameCode = new();
@@ -73,9 +73,10 @@ public class AiService(IHubContext<GameHub> hub, MlModels ml)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"AI error: {ex.Message}");
+            logger.LogError(ex, "AI turn failed");
             try
             {
+                game.ClearPending();
                 var state = game.State;
                 if (state is null || state.Phase != GamePhase.Playing) return;
                 var player = state.Players[state.CurrentPlayerIndex];

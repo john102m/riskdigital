@@ -10,7 +10,7 @@ Live at **risk.spooch.co.uk**
 Phone (React) ──SignalR──▶ .NET 8 Server (WHUK) ◀──SignalR── TV Board (Web or Unity)
 ```
 
-- **server/** — .NET 8 + SignalR game server (open in VS2022)
+- **server/** — .NET 8 + SignalR game server (open in VS2026)
 - **handset/** — React 18 + Vite + Tailwind player controller (open in VS Code)
 - **docs/** — Design docs, rules, territory data, map asset
 
@@ -44,7 +44,7 @@ Unity repo: https://github.com/john102m/UnityDigitalRisk.git
 ### Server
 ```bash
 cd server/Risk.Server
-# Open in VS2022 and run (do not use dotnet CLI)
+# Open in VS2026 and run (do not use dotnet CLI)
 ```
 Runs on `http://0.0.0.0:5000` — SignalR hub at `/gamehub`.
 
