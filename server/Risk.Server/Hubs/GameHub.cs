@@ -400,19 +400,15 @@ public class GameHub : Hub
     }
 
     /// <summary>Legacy: TV submits both attacker and defender dice (single TV mode).</summary>
-    public async Task SubmitDiceResult(int[] attackerDice, int[] defenderDice)
+    public Task SubmitDiceResult(int[] attackerDice, int[] defenderDice)
     {
         var game = _manager.GetGameByConnection(Context.ConnectionId);
-        var gameCode = _manager.GetGameCode(Context.ConnectionId);
-        if (game == null || gameCode == null) return;
+        if (game == null) return Task.CompletedTask;
 
         game.SubmitDiceResult(attackerDice, defenderDice);
-
-        // Broadcast to all TVs so remote households can place statically
-        if (attackerDice.Length > 0)
-            await GameGroup(gameCode).SendAsync("AttackerDiceResult", attackerDice);
-        if (defenderDice.Length > 0)
-            await GameGroup(gameCode).SendAsync("DefenderDiceResult", defenderDice);
+        return Task.CompletedTask;
+        // Broadcasts (AttackerDiceResult / DefenderDiceResult) are handled by AttackWithDice
+        // after both dice sets are known — correct shape, correct timing, serves all TVs.
     }
 
     /// <summary>Multi-household: TV submits only its own dice (attacker OR defender).</summary>
