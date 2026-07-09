@@ -15,6 +15,7 @@
         public int AttackerPlayerIndex { get; init; }
         public int DefenderPlayerIndex { get; init; }
         public TaskCompletionSource<int> DefenderRoll { get; } = new();
+        public TaskCompletionSource<int[]> AttackerSubmitted { get; } = new();
         public TaskCompletionSource<(int[] AttackerDice, int[] DefenderDice)> DiceResult { get; } = new();
 
         private int[]? _attackerDice;
@@ -28,6 +29,7 @@
         public void SubmitAttackerDice(int[] dice)
         {
             _attackerDice = dice;
+            AttackerSubmitted.TrySetResult(dice);
             TryComplete();
         }
 

@@ -14,6 +14,7 @@ export function useConnection() {
   const [forcedTrade, setForcedTrade] = useState(false);
   const [mission, setMission] = useState<Mission | null>(null);
   const [missionToast, setMissionToast] = useState<string | null>(null);
+  const missionFallbackShown = useRef(false);
   const [rollPrompt, setRollPrompt] = useState<RollPrompt | null>(null);
   const [combatInProgress, setCombatInProgress] = useState(false);
 
@@ -25,14 +26,13 @@ export function useConnection() {
 
     conn.on("GameStateUpdated", (state: GameState) => {
       setGameState(state);
-      if (state?.phase === "Lobby") { setCards([]); setMission(null); setForcedTrade(false); }
+      if (state?.phase === "Lobby") { setCards([]); setMission(null); setForcedTrade(false); missionFallbackShown.current = false; }
     });
     conn.on("CardsUpdated", (hand: Card[]) => setCards(hand));
     conn.on("MissionUpdated", (m: Mission) => {
-      if (m.fallenBackToWorldDomination && !mission) {
-        // First time receiving fallback — show toast
+      if (m.fallenBackToWorldDomination && !missionFallbackShown.current) {
+        missionFallbackShown.current = true;
         setMissionToast("Your target was eliminated — mission is now world domination");
-        setTimeout(() => setMissionToast(null), 5000);
       }
       setMission(m);
     });
@@ -81,5 +81,5 @@ export function useConnection() {
     };
   }, []);
 
-  return { connection, gameState, cards, mission, missionToast, forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null), combatInProgress };
+  return { connection, gameState, cards, mission, missionToast, clearMissionToast: () => setMissionToast(null), forcedTrade, clearForcedTrade: () => setForcedTrade(false), rollPrompt, clearRollPrompt: () => setRollPrompt(null), combatInProgress };
 }

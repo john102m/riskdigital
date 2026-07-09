@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Risk.Server.Hubs;
 using Risk.Server.Models;
 using System.Text.Json;
@@ -25,6 +26,7 @@ public partial class GameService
 
     private readonly TerritoryData _territoryData;
     private readonly DiceAuditLogger? _diceAudit;
+    private readonly ILogger<GameService> _logger;
     private GameState? _state;
     private readonly List<TVRegistration> _registeredTVs = new();
     private PendingCombat? _pending;
@@ -35,8 +37,9 @@ public partial class GameService
     public GameState? State => _state;
     public TerritoryData MapData => _territoryData;
 
-    public GameService(DiceAuditLogger? diceAudit = null)
+    public GameService(ILogger<GameService> logger, DiceAuditLogger? diceAudit = null)
     {
+        _logger = logger;
         _diceAudit = diceAudit;
         var json = File.ReadAllText("Data/territories.json");
         _territoryData = JsonSerializer.Deserialize<TerritoryData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
@@ -58,7 +61,7 @@ public partial class GameService
     /// <summary>Get the TV connection that owns a given player (for dice routing).</summary>
     public string? GetTVForPlayer(int playerIndex)
     {
-        System.Diagnostics.Debug.WriteLine($"[TV] GetTVForPlayer({playerIndex}): count={_registeredTVs.Count}, TVs=[{string.Join("; ", _registeredTVs.Select(t => $"{t.HouseholdId ?? "none"}:[{(t.PlayerIndices != null ? string.Join(",", t.PlayerIndices) : "null")}]"))}]");
+        _logger.LogInformation("[TV] GetTVForPlayer({PlayerIndex}): count={Count}, TVs=[{TVs}]", playerIndex, _registeredTVs.Count, string.Join("; ", _registeredTVs.Select(t => $"{t.HouseholdId ?? "none"}:[{(t.PlayerIndices != null ? string.Join(",", t.PlayerIndices) : "null")}]")));
 
         // If only one TV registered (or no households configured), it gets everything
         if (_registeredTVs.Count == 1) return _registeredTVs[0].ConnectionId;
@@ -68,12 +71,12 @@ public partial class GameService
         var match = _registeredTVs.FirstOrDefault(t => t.PlayerIndices?.Contains(playerIndex) == true);
         if (match != null)
         {
-            System.Diagnostics.Debug.WriteLine($"[TV] → matched {match.HouseholdId}");
+            _logger.LogInformation("[TV] → matched {Household}", match.HouseholdId);
             return match.ConnectionId;
         }
 
         // No match — fall back to first TV (shouldn't happen if configured correctly)
-        System.Diagnostics.Debug.WriteLine($"[TV] → NO MATCH, falling back to first TV ({_registeredTVs[0].HouseholdId})");
+        _logger.LogInformation("[TV] → NO MATCH, falling back to first TV ({Household})", _registeredTVs[0].HouseholdId);
         return _registeredTVs[0].ConnectionId;
     }
 

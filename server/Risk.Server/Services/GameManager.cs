@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace Risk.Server.Services;
 
@@ -11,16 +12,19 @@ public class GameManager
     private readonly ConcurrentDictionary<string, GameService> _games = new();
     private readonly ConcurrentDictionary<string, string> _connectionToGame = new();
     private readonly DiceAuditLogger? _diceAudit;
+    private readonly ILoggerFactory _loggerFactory;
 
-    public GameManager(DiceAuditLogger? diceAudit = null)
+    public GameManager(ILoggerFactory loggerFactory, DiceAuditLogger? diceAudit = null)
     {
+        _loggerFactory = loggerFactory;
         _diceAudit = diceAudit;
     }
 
     /// <summary>Creates a new game and returns (gameCode, gameService).</summary>
     public (string GameCode, GameService Game) CreateGame()
     {
-        var game = new GameService(_diceAudit);
+        var logger = _loggerFactory.CreateLogger<GameService>();
+        var game = new GameService(logger, _diceAudit);
         string code;
         do { code = GenerateCode(); }
         while (!_games.TryAdd(code, game));

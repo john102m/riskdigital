@@ -133,7 +133,24 @@
 - ✅ TurnStarted + MissionComplete SignalR events wired up
 - ✅ Blitz consecutive attack delay (3s minimum hold before next blitz takes over camera)
 
-## Phase 4 — Visual Polish (not started)
+## Phase 4 — Multi-Household Dice ✅ (2026-07-06 → 2026-07-09)
+
+- ✅ Server: TV registration with householdId + playerIndices, GetTVForPlayer routing
+- ✅ Server: SpawnDice broadcast to group (all TVs open arena simultaneously)
+- ✅ Server: AttackerDiceResult / DefenderDiceResult broadcast after submission
+- ✅ Server: SubmitRolledDice hub method for split attacker/defender submission
+- ✅ Server: PendingCombat supports split TryComplete (attacker + defender arrive separately)
+- ✅ Server: Sequential flow — attacker submits → broadcast → defender prompted
+- ✅ Unity: Role-per-combat enum (Attacker, Defender, SameHousehold, Spectator)
+- ✅ Unity: Ghost rolls on non-owning TV (physics + snap to authoritative values)
+- ✅ Unity: activeDice / staticDice separation (no NullRef on face read)
+- ✅ Unity: Spectator display (blitz-style static dice on non-owning TV)
+- ✅ Unity: EarlySettleAttacker — immediate read/submit so defender TV gets snap before Roll
+- ✅ Unity: GameJoinScreen with household input
+- ✅ All 4 test scenarios passing (cross-household both directions, same-household, bot cross)
+- ✅ Single-TV backward compat maintained
+
+## Phase 5 — Visual Polish (not started)
 
 - [ ] Custom Blender tokens (replace cylinders)
 - [ ] Territory tint fills

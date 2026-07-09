@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Risk.Server.Hubs;
 using Risk.Server.Models;
 
@@ -134,16 +135,16 @@ public partial class GameService
         if (sameHousehold)
         {
             // Same TV rolls both — send both SpawnDice to group (spectator TVs open arena too)
-            System.Diagnostics.Debug.WriteLine($"[DICE] Same-household: both on {(_registeredTVs.FirstOrDefault(t => t.ConnectionId == attackerTvConn)?.HouseholdId ?? "?")}");
+            _logger.LogInformation("[DICE] Same-household: both on {Household}", _registeredTVs.FirstOrDefault(t => t.ConnectionId == attackerTvConn)?.HouseholdId ?? "?");
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
             _pending.DefenderRoll.TrySetResult(defenderDiceCount);
 
             // Wait for combined result (15s timeout)
             var sameHouseDiceTask = _pending.DiceResult.Task;
-            if (await Task.WhenAny(sameHouseDiceTask, Task.Delay(15000)) != sameHouseDiceTask || sameHouseDiceTask.IsCanceled)
+            if (await Task.WhenAny(sameHouseDiceTask, Task.Delay(60000)) != sameHouseDiceTask || sameHouseDiceTask.IsCanceled)
             {
-                System.Diagnostics.Debug.WriteLine($"[DICE] Same-household timeout — falling back to server roll");
+                _logger.LogInformation("[DICE] Same-household timeout — falling back to server roll");
                 _pending = null;
                 return Attack(connectionId, sourceId, targetId, diceCount);
             }
@@ -161,7 +162,7 @@ public partial class GameService
         // ─── Cross-household: parallel flow ─────────────────────────────────
         // Send both SpawnDice simultaneously — all arenas roll at once.
         // Server waits for both authoritative submissions in parallel.
-        System.Diagnostics.Debug.WriteLine($"[DICE] Parallel spawn: attacker + defender → group");
+        _logger.LogInformation("[DICE] Parallel spawn: attacker + defender → group");
         await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
 
         if (defenderPlayer.IsAI)
@@ -176,23 +177,35 @@ public partial class GameService
             // They tap Roll → PlayerRoll sends SpawnDice("defender") to group
             await hub.Clients.Group(gameCode).SendAsync("RollPrompt",
                 new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name));
-            System.Diagnostics.Debug.WriteLine($"[DICE] RollPrompt sent to {defenderPlayer.Name}");
+            _logger.LogInformation("[DICE] RollPrompt sent to {Defender}", defenderPlayer.Name);
         }
 
-        // ─── Wait for both to submit (15s timeout) ───────────────────────────
+        // ─── Wait for both to submit (60s timeout) ───────────────────────────
         var diceResultTask = _pending.DiceResult.Task;
-        if (await Task.WhenAny(diceResultTask, Task.Delay(15000)) != diceResultTask || diceResultTask.IsCanceled)
+
+        // Broadcast attacker values as soon as attacker submits — defender TV snaps ghost red before rolling
+        var attackerSubmittedTask = _pending.AttackerSubmitted.Task;
+        _ = Task.Run(async () =>
         {
-            System.Diagnostics.Debug.WriteLine($"[DICE] Dice submit timeout — falling back to server roll");
+            if (await Task.WhenAny(attackerSubmittedTask, Task.Delay(60000)) == attackerSubmittedTask)
+            {
+                var attackerDice = await attackerSubmittedTask;
+                await hub.Clients.Group(gameCode).SendAsync("AttackerDiceResult", new { values = attackerDice, sourceId, targetId });
+                _logger.LogInformation("[DICE] Early AttackerDiceResult broadcast: [{Values}]", string.Join(",", attackerDice));
+            }
+        });
+
+        if (await Task.WhenAny(diceResultTask, Task.Delay(60000)) != diceResultTask || diceResultTask.IsCanceled)
+        {
+            _logger.LogInformation("[DICE] Dice submit timeout — falling back to server roll");
             _pending = null;
             return Attack(connectionId, sourceId, targetId, diceCount);
         }
 
-        // ─── Both submitted — broadcast results and resolve ───────────────────
+        // ─── Both submitted — broadcast defender result and resolve ──────────
         var (finalAttacker, finalDefender) = await diceResultTask;
-        await hub.Clients.Group(gameCode).SendAsync("AttackerDiceResult", new { values = finalAttacker, sourceId, targetId });
         await hub.Clients.Group(gameCode).SendAsync("DefenderDiceResult", finalDefender);
-        System.Diagnostics.Debug.WriteLine($"[DICE] Both submitted — A[{string.Join(",", finalAttacker)}] D[{string.Join(",", finalDefender)}], resolving");
+        _logger.LogInformation("[DICE] Both submitted — A[{Attacker}] D[{Defender}], resolving", string.Join(",", finalAttacker), string.Join(",", finalDefender));
 
         await Task.Delay(500);
         _pending = null;
@@ -211,7 +224,7 @@ public partial class GameService
             int finalCount = Math.Min(diceCount, _pending.DefenderDiceCount);
             _pending.DefenderDiceCount = finalCount;
             _pending.DefenderRoll.TrySetResult(finalCount);
-            System.Diagnostics.Debug.WriteLine($"[DICE] PlayerRoll defender (human): diceCount={finalCount} → broadcast to group");
+            _logger.LogInformation("[DICE] PlayerRoll defender (human): diceCount={Count} → broadcast to group", finalCount);
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pending.SourceId, _pending.TargetId, _pending.DefenderPlayerIndex));
         }
     }
