@@ -134,11 +134,22 @@ public partial class GameService
 
         if (sameHousehold)
         {
-            // Same TV rolls both — send both SpawnDice to group (spectator TVs open arena too)
+            // Same TV rolls both — send attacker SpawnDice to group, then handle defender
             _logger.LogInformation("[DICE] Same-household: both on {Household}", _registeredTVs.FirstOrDefault(t => t.ConnectionId == attackerTvConn)?.HouseholdId ?? "?");
             await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
-            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
-            _pending.DefenderRoll.TrySetResult(defenderDiceCount);
+
+            if (defenderPlayer.IsAI)
+            {
+                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
+                _pending.DefenderRoll.TrySetResult(defenderDiceCount);
+            }
+            else
+            {
+                // Human defender on same TV — still needs to tap Roll
+                await hub.Clients.Group(gameCode).SendAsync("RollPrompt",
+                    new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name));
+                _logger.LogInformation("[DICE] Same-household RollPrompt sent to {Defender}", defenderPlayer.Name);
+            }
 
             // Wait for combined result (15s timeout)
             var sameHouseDiceTask = _pending.DiceResult.Task;

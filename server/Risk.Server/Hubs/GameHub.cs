@@ -281,10 +281,13 @@ public class GameHub : Hub
         if (game.State?.TurnPhase == TurnPhase.Fortify)
             _log.LogFortifySkip(game.State, game.State.CurrentPlayerIndex);
         var state = game.EndTurn(Context.ConnectionId);
-        await Task.Delay(1000); // breathing room for fortify animation to clear
         await GameGroup(gameCode).SendAsync("TurnStarted", state.CurrentPlayerIndex);
         await BroadcastState(state, gameCode);
-        _ai.TriggerIfAi(game, gameCode);
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1000); // breathing room for animations before bot starts
+            _ai.TriggerIfAi(game, gameCode);
+        });
     }
 
     // ─── Reconnect / State ───────────────────────────────────────────────────

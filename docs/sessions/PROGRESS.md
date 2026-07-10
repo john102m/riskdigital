@@ -1,5 +1,30 @@
 # Risk Digital — Progress Log
 
+## 2026-07-09 — Defender Dice Snap Timing, Blitz Cam Fix, Mission Fallback UX
+
+### Completed
+
+- **Fix: Defender TV red dice snap timing** — Attacker TV was delaying read/submit of settled dice until `SpawnDice("defender")` arrived. For human defenders, that meant `AttackerDiceResult` only broadcast after they tapped Roll — too late for the defender TV to snap ghost red faces before blue dice spawned. Fix: `EarlySettleAttacker` reads and submits immediately once physics settle. Defender TV now shows correct attacker faces while human ponders.
+- **Fix: Blitz camera sweep jank** — `ShowBlitzDice` called `OpenArena()` (which fires a background flypath) then started its own awaited flypath. Two concurrent `Fly()` calls fighting over the same camera transform caused discontinuous jumps. Fix: position panel + show directly, skip `StartCameraSweep`, let the blitz flypath be the sole controller.
+- **Handset: Mission fallback popup** — Changed from auto-dismiss pulsing banner to a dismissable modal (same style as mission welcome). Shows once per game via ref flag, resets on lobby.
+- **Gitignore: risk-models/*.zip** — Auto-retrained ML.NET models removed from tracking.
+- **Docs: Multi-household Phase 4 complete** — Updated UNITY-PROGRESS.md with full Phase 4 checklist.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` | `EarlySettleAttacker`, `attackerAlreadySubmitted` flag, blitz double-sweep fix |
+| `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\DiceRoller.cs` | `ReadAll()` and `WaitForSettle()` made public |
+| `handset/src/App.tsx` | Mission fallback as dismissable modal |
+| `handset/src/hooks/useConnection.ts` | `clearMissionToast`, `missionFallbackShown` ref, once-only gate |
+| `.gitignore` | `risk-models/*.zip` added |
+| `docs/unity/UNITY-PROGRESS.md` | Phase 4 Multi-Household Dice section |
+| `docs/sessions/SESSION-2026-07-09.md` | Session notes |
+| `docs/proposals/PROPOSAL-FIX-DEFENDER-RED-SNAP-TIMING.md` | Proposal doc |
+
+---
+
 ## 2026-06-29 Evening — Combat State Machine Testing, Bug Fixes, Error Handling, Docs
 
 ### Completed
