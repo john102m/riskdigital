@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Risk.Server.Hubs;
 using Risk.Server.Models;
 using System.Text.Json;
@@ -25,17 +26,20 @@ public partial class GameService
 
     private readonly TerritoryData _territoryData;
     private readonly DiceAuditLogger? _diceAudit;
+    private readonly ILogger<GameService> _logger;
     private GameState? _state;
-    private string? _unityTVConnectionId;
+    private readonly List<TVRegistration> _registeredTVs = new();
     private PendingCombat? _pending;
 
-    public bool IsUnityTVConnected => _unityTVConnectionId != null;
+    public bool IsUnityTVConnected => _registeredTVs.Count > 0;
     public PendingCombat? GetPending() => _pending;
+    public void ClearPending() => _pending = null;
     public GameState? State => _state;
     public TerritoryData MapData => _territoryData;
 
-    public GameService(DiceAuditLogger? diceAudit = null)
+    public GameService(ILogger<GameService> logger, DiceAuditLogger? diceAudit = null)
     {
+        _logger = logger;
         _diceAudit = diceAudit;
         var json = File.ReadAllText("Data/territories.json");
         _territoryData = JsonSerializer.Deserialize<TerritoryData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
@@ -43,13 +47,47 @@ public partial class GameService
 
     #region Unity TV
 
-    public void RegisterAsTV(string connectionId) => _unityTVConnectionId = connectionId;
+    /// <summary>TV registration with optional household assignment.</summary>
+    public record TVRegistration(string ConnectionId, string? HouseholdId, int[]? PlayerIndices);
+
+    /// <summary>Register a TV. If no householdId/playerIndices, it's a single-TV setup (backward compat).</summary>
+    public void RegisterAsTV(string connectionId, string? householdId = null, int[]? playerIndices = null)
+    {
+        // Remove any existing registration for this connection
+        _registeredTVs.RemoveAll(t => t.ConnectionId == connectionId);
+        _registeredTVs.Add(new TVRegistration(connectionId, householdId, playerIndices));
+    }
+
+    /// <summary>Get the TV connection that owns a given player (for dice routing).</summary>
+    public string? GetTVForPlayer(int playerIndex)
+    {
+        _logger.LogInformation("[TV] GetTVForPlayer({PlayerIndex}): count={Count}, TVs=[{TVs}]", playerIndex, _registeredTVs.Count, string.Join("; ", _registeredTVs.Select(t => $"{t.HouseholdId ?? "none"}:[{(t.PlayerIndices != null ? string.Join(",", t.PlayerIndices) : "null")}]")));
+
+        // If only one TV registered (or no households configured), it gets everything
+        if (_registeredTVs.Count == 1) return _registeredTVs[0].ConnectionId;
+        if (_registeredTVs.Count == 0) return null;
+
+        // Look for a TV that claims this player
+        var match = _registeredTVs.FirstOrDefault(t => t.PlayerIndices?.Contains(playerIndex) == true);
+        if (match != null)
+        {
+            _logger.LogInformation("[TV] → matched {Household}", match.HouseholdId);
+            return match.ConnectionId;
+        }
+
+        // No match — fall back to first TV (shouldn't happen if configured correctly)
+        _logger.LogInformation("[TV] → NO MATCH, falling back to first TV ({Household})", _registeredTVs[0].HouseholdId);
+        return _registeredTVs[0].ConnectionId;
+    }
+
+    /// <summary>Get all registered TV connection IDs.</summary>
+    public IReadOnlyList<TVRegistration> GetRegisteredTVs() => _registeredTVs;
 
     public void UnregisterTV(string connectionId)
     {
-        if (_unityTVConnectionId == connectionId)
+        var removed = _registeredTVs.RemoveAll(t => t.ConnectionId == connectionId);
+        if (removed > 0)
         {
-            _unityTVConnectionId = null;
             // Force-fail any pending dice result so server falls back immediately
             _pending?.DiceResult.TrySetCanceled();
         }

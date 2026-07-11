@@ -13,7 +13,7 @@ import { StatusBadge } from "./components/StatusBadge";
 import { Toast } from "./components/Toast";
 
 export default function App() {
-  const { connection, gameState, cards, mission, missionToast, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress } = useConnection();
+  const { connection, gameState, cards, mission, missionToast, clearMissionToast, forcedTrade, clearForcedTrade, rollPrompt, clearRollPrompt, combatInProgress } = useConnection();
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("risk_name") || "");
   const [showMissionWelcome, setShowMissionWelcome] = useState(false);
   const [lastTurnIndex, setLastTurnIndex] = useState<number | null>(null);
@@ -67,8 +67,15 @@ export default function App() {
 
   if (gameState.phase === "Playing") {
     const missionToastEl = missionToast ? (
-      <div className="fixed top-4 left-4 right-4 bg-amber-900/90 text-amber-200 px-4 py-3 rounded-lg text-sm font-medium text-center z-50 animate-pulse">
-        {missionToast}
+      <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={clearMissionToast}>
+        <div className="bg-gray-800 border border-gray-600 rounded-xl p-6 max-w-xs text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-xl font-bold text-white">Mission Changed</h2>
+          <p className="text-lg text-amber-300">{missionToast}</p>
+          <button onClick={clearMissionToast} className="mt-2 bg-gray-700 active:bg-gray-600 px-6 py-2 rounded-lg text-white font-medium">
+            Got it
+          </button>
+        </div>
       </div>
     ) : null;
 

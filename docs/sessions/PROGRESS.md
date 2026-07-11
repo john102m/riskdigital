@@ -1,5 +1,62 @@
 # Risk Digital — Progress Log
 
+## 2026-07-10 — Same-Household Defender Fix, WebGL Exploration, Web TV Parity Proposal
+
+### Completed
+
+- **Fix: Same-household human defender not getting RollPrompt** — When a bot attacked a human on the same household TV, the `sameHousehold` branch auto-spawned both sets of dice without prompting the human to defend. Fix: check `defenderPlayer.IsAI` in the same-household branch — bots auto-spawn, humans get `RollPrompt`.
+- **Fix: SameHousehold state guard hang** — After the above fix, `EarlySettleAttacker` set `state = ShowingResult` before defender dice spawned. When `SpawnDice("defender")` upgraded to `SameHousehold`, `WaitSettleAttacker` bailed on the `state != Rolling` guard and never submitted. Fix: reset `state = Rolling` on role upgrade to `SameHousehold`.
+- **WebGL build explored** — Built Unity to WebGL (Brotli). Renders in browser but SignalR client (`Microsoft.AspNetCore.SignalR.Client`) relies on .NET sockets incompatible with browser sandbox. Dead end without a JS interop bridge. Not worth the effort.
+- **Web TV parity proposal** — Full gap analysis between Unity desktop board and `tv.html`. CSS 3D dice design, priority tiers (P1 dice/blitz/events, P2 zoom, P3 soundtrack/drift), hybrid scenario documentation (Unity TV + web board cross-household).
+- **Hybrid dice routing documented** — Three scenarios mapped: Unity attacks/web defends, web attacks/Unity defends, both web. Key insight: with one Unity TV claiming all players, web board is just a spectator animating broadcast results. No server changes needed for that mode.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `server/Risk.Server/Services/GameService.Combat.cs` | Same-household branch: human defender gets RollPrompt instead of auto-spawn |
+| `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.Events.cs` | Reset `state = Rolling` on SameHousehold upgrade |
+| `docs/proposals/PROPOSAL-WEB-TV-CSS-DICE.md` | Full parity proposal with gap analysis, CSS dice design, hybrid scenarios |
+
+### Key Decisions
+
+- Unity desktop build remains primary TV target (physics dice, camera flypath)
+- `tv.html` is the zero-install alternative (CSS dice, any browser)
+- WebGL abandoned — SignalR incompatible with browser networking
+- Hybrid mode (1 Unity + 1 web): Unity TV claims all players, rolls all physics. Web board animates results from broadcasts. No server changes required for this setup.
+- Future server change only needed if a web-only player needs to "own" their dice (no Unity TV in their household at all)
+
+### Hardware Explored
+
+- Lenovo ThinkCentre M700 (i5-6400T, 8GB, 128GB SSD) as potential dedicated TV machine for Unity desktop build — viable, ~£60-80 used, replaces laptop-on-HDMI setup
+
+---
+
+## 2026-07-09 — Defender Dice Snap Timing, Blitz Cam Fix, Mission Fallback UX
+
+### Completed
+
+- **Fix: Defender TV red dice snap timing** — Attacker TV was delaying read/submit of settled dice until `SpawnDice("defender")` arrived. For human defenders, that meant `AttackerDiceResult` only broadcast after they tapped Roll — too late for the defender TV to snap ghost red faces before blue dice spawned. Fix: `EarlySettleAttacker` reads and submits immediately once physics settle. Defender TV now shows correct attacker faces while human ponders.
+- **Fix: Blitz camera sweep jank** — `ShowBlitzDice` called `OpenArena()` (which fires a background flypath) then started its own awaited flypath. Two concurrent `Fly()` calls fighting over the same camera transform caused discontinuous jumps. Fix: position panel + show directly, skip `StartCameraSweep`, let the blitz flypath be the sole controller.
+- **Handset: Mission fallback popup** — Changed from auto-dismiss pulsing banner to a dismissable modal (same style as mission welcome). Shows once per game via ref flag, resets on lobby.
+- **Gitignore: risk-models/*.zip** — Auto-retrained ML.NET models removed from tracking.
+- **Docs: Multi-household Phase 4 complete** — Updated UNITY-PROGRESS.md with full Phase 4 checklist.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\CombatTheatre.cs` | `EarlySettleAttacker`, `attackerAlreadySubmitted` flag, blitz double-sweep fix |
+| `D:\Unity Projects\RiskDigitalBoard\Assets\Scripts\DiceRoller.cs` | `ReadAll()` and `WaitForSettle()` made public |
+| `handset/src/App.tsx` | Mission fallback as dismissable modal |
+| `handset/src/hooks/useConnection.ts` | `clearMissionToast`, `missionFallbackShown` ref, once-only gate |
+| `.gitignore` | `risk-models/*.zip` added |
+| `docs/unity/UNITY-PROGRESS.md` | Phase 4 Multi-Household Dice section |
+| `docs/sessions/SESSION-2026-07-09.md` | Session notes |
+| `docs/proposals/PROPOSAL-FIX-DEFENDER-RED-SNAP-TIMING.md` | Proposal doc |
+
+---
+
 ## 2026-06-29 Evening — Combat State Machine Testing, Bug Fixes, Error Handling, Docs
 
 ### Completed

@@ -99,6 +99,7 @@ public partial class GameService
 
     /// <summary>
     /// Attack with Unity dice delegation when connected, server-side fallback otherwise.
+    /// Sequential flow: attacker spawns → attacker submits → defender spawns → defender submits → resolve.
     /// </summary>
     public async Task<(GameState State, CombatResult Result)> AttackWithDice(
         IHubContext<GameHub> hub, string gameCode, string connectionId, int sourceId, int targetId, int diceCount)
@@ -125,93 +126,120 @@ public partial class GameService
             DefenderPlayerIndex = target.OwnerId
         };
 
-        if (attackerPlayer.IsAI && defenderPlayer.IsAI)
+        // ─── Step 1: Spawn attacker dice ─────────────────────────────────────
+        var attackerTvConn = GetTVForPlayer(_pending.AttackerPlayerIndex);
+        var defenderTvConn = GetTVForPlayer(_pending.DefenderPlayerIndex);
+        bool sameHousehold = attackerTvConn != null && attackerTvConn == defenderTvConn;
+
+        if (sameHousehold)
         {
-            _ = Task.Run(async () =>
+            // Same TV rolls both — send attacker SpawnDice to group, then handle defender
+            _logger.LogInformation("[DICE] Same-household: both on {Household}", _registeredTVs.FirstOrDefault(t => t.ConnectionId == attackerTvConn)?.HouseholdId ?? "?");
+            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
+
+            if (defenderPlayer.IsAI)
             {
-                await Task.Delay(1000);
-                await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
-                await PlayerRoll(hub, gameCode, defenderPlayer.ConnectionId, defenderDiceCount);
-            });
+                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
+                _pending.DefenderRoll.TrySetResult(defenderDiceCount);
+            }
+            else
+            {
+                // Human defender on same TV — still needs to tap Roll
+                await hub.Clients.Group(gameCode).SendAsync("RollPrompt",
+                    new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name));
+                _logger.LogInformation("[DICE] Same-household RollPrompt sent to {Defender}", defenderPlayer.Name);
+            }
+
+            // Wait for combined result (15s timeout)
+            var sameHouseDiceTask = _pending.DiceResult.Task;
+            if (await Task.WhenAny(sameHouseDiceTask, Task.Delay(60000)) != sameHouseDiceTask || sameHouseDiceTask.IsCanceled)
+            {
+                _logger.LogInformation("[DICE] Same-household timeout — falling back to server roll");
+                _pending = null;
+                return Attack(connectionId, sourceId, targetId, diceCount);
+            }
+
+            var (shAttacker, shDefender) = await sameHouseDiceTask;
+            // Broadcast to spectator TVs
+            await hub.Clients.Group(gameCode).SendAsync("AttackerDiceResult", new { values = shAttacker, sourceId, targetId });
+            await hub.Clients.Group(gameCode).SendAsync("DefenderDiceResult", shDefender);
+            await Task.Delay(500);
+
+            _pending = null;
+            return ResolveCombat(connectionId, sourceId, targetId, shAttacker, shDefender);
         }
-        else if (defenderPlayer.IsAI)
+
+        // ─── Cross-household: parallel flow ─────────────────────────────────
+        // Send both SpawnDice simultaneously — all arenas roll at once.
+        // Server waits for both authoritative submissions in parallel.
+        _logger.LogInformation("[DICE] Parallel spawn: attacker + defender → group");
+        await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, sourceId, targetId, _pending.AttackerPlayerIndex));
+
+        if (defenderPlayer.IsAI)
         {
-            await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
-            await PlayerRoll(hub, gameCode, defenderPlayer.ConnectionId, defenderDiceCount);
+            // Bot: spawn defender dice immediately, auto-complete submission
+            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", defenderDiceCount, sourceId, targetId, _pending.DefenderPlayerIndex));
+            _pending.DefenderRoll.TrySetResult(defenderDiceCount);
         }
         else
         {
-            await PlayerRoll(hub, gameCode, attackerPlayer.ConnectionId, diceCount);
-            _ = Task.Run(() => hub.Clients.Group(gameCode).SendAsync("RollPrompt",
-                new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name)));
+            // Human defender: send RollPrompt — their arena is already open from SpawnDice("attacker")
+            // They tap Roll → PlayerRoll sends SpawnDice("defender") to group
+            await hub.Clients.Group(gameCode).SendAsync("RollPrompt",
+                new RollPrompt("defender", defenderDiceCount, defenderDiceCount, sourceId, targetId, defenderPlayer.Name));
+            _logger.LogInformation("[DICE] RollPrompt sent to {Defender}", defenderPlayer.Name);
         }
 
-        // Wait for both players to roll (30s timeout prevents infinite stuck if prompt lost)
-        var rollsCompleted = Task.WhenAll(_pending.AttackerRoll.Task, _pending.DefenderRoll.Task);
-        if (await Task.WhenAny(rollsCompleted, Task.Delay(30000)) != rollsCompleted)
+        // ─── Wait for both to submit (60s timeout) ───────────────────────────
+        var diceResultTask = _pending.DiceResult.Task;
+
+        // Broadcast attacker values as soon as attacker submits — defender TV snaps ghost red before rolling
+        var attackerSubmittedTask = _pending.AttackerSubmitted.Task;
+        _ = Task.Run(async () =>
         {
+            if (await Task.WhenAny(attackerSubmittedTask, Task.Delay(60000)) == attackerSubmittedTask)
+            {
+                var attackerDice = await attackerSubmittedTask;
+                await hub.Clients.Group(gameCode).SendAsync("AttackerDiceResult", new { values = attackerDice, sourceId, targetId });
+                _logger.LogInformation("[DICE] Early AttackerDiceResult broadcast: [{Values}]", string.Join(",", attackerDice));
+            }
+        });
+
+        if (await Task.WhenAny(diceResultTask, Task.Delay(60000)) != diceResultTask || diceResultTask.IsCanceled)
+        {
+            _logger.LogInformation("[DICE] Dice submit timeout — falling back to server roll");
             _pending = null;
             return Attack(connectionId, sourceId, targetId, diceCount);
         }
 
-        var completed = await Task.WhenAny(_pending.DiceResult.Task, Task.Delay(10000));
-        if (completed == _pending.DiceResult.Task && !_pending.DiceResult.Task.IsCanceled)
-        {
-            var (attackerDice, defenderDice) = await _pending.DiceResult.Task;
-            _pending = null;
-            return ResolveCombat(connectionId, sourceId, targetId, attackerDice, defenderDice);
-        }
+        // ─── Both submitted — broadcast defender result and resolve ──────────
+        var (finalAttacker, finalDefender) = await diceResultTask;
+        await hub.Clients.Group(gameCode).SendAsync("DefenderDiceResult", finalDefender);
+        _logger.LogInformation("[DICE] Both submitted — A[{Attacker}] D[{Defender}], resolving", string.Join(",", finalAttacker), string.Join(",", finalDefender));
 
+        await Task.Delay(500);
         _pending = null;
-        return Attack(connectionId, sourceId, targetId, diceCount);
+        return ResolveCombat(connectionId, sourceId, targetId, finalAttacker, finalDefender);
     }
 
+    /// <summary>Human defender taps Roll — spawn defender dice on their TV.</summary>
     public async Task PlayerRoll(IHubContext<GameHub> hub, string gameCode, string connectionId, int diceCount)
     {
         if (_pending == null) return;
 
-        var attackerConnId = _state!.Players[_pending.AttackerPlayerIndex].ConnectionId;
-        var defenderConnId = _state.Players[_pending.DefenderPlayerIndex].ConnectionId;
+        var defenderConnId = _state!.Players[_pending.DefenderPlayerIndex].ConnectionId;
 
-        if (connectionId == attackerConnId && !_pending.AttackerRoll.Task.IsCompleted)
-        {
-            _pending.AttackerRoll.TrySetResult(diceCount);
-            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", diceCount, _pending.SourceId, _pending.TargetId));
-            await AutoRollBotOpponent(hub, gameCode, "defender");
-        }
-        else if (connectionId == defenderConnId && !_pending.DefenderRoll.Task.IsCompleted)
+        if (connectionId == defenderConnId && !_pending.DefenderRoll.Task.IsCompleted)
         {
             int finalCount = Math.Min(diceCount, _pending.DefenderDiceCount);
             _pending.DefenderDiceCount = finalCount;
             _pending.DefenderRoll.TrySetResult(finalCount);
-            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pending.SourceId, _pending.TargetId));
-            await AutoRollBotOpponent(hub, gameCode, "attacker");
+            _logger.LogInformation("[DICE] PlayerRoll defender (human): diceCount={Count} → broadcast to group", finalCount);
+            await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", finalCount, _pending.SourceId, _pending.TargetId, _pending.DefenderPlayerIndex));
         }
     }
 
-    private async Task AutoRollBotOpponent(IHubContext<GameHub> hub, string gameCode, string role)
-    {
-        if (_pending == null) return;
-
-        if (role == "defender" && !_pending.DefenderRoll.Task.IsCompleted)
-        {
-            var defender = _state!.Players[_pending.DefenderPlayerIndex];
-            if (defender.IsAI)
-            {
-                _pending.DefenderRoll.TrySetResult(_pending.DefenderDiceCount);
-                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("defender", _pending.DefenderDiceCount, _pending.SourceId, _pending.TargetId));
-            }
-        }
-        else if (role == "attacker" && !_pending.AttackerRoll.Task.IsCompleted)
-        {
-            var attacker = _state!.Players[_pending.AttackerPlayerIndex];
-            if (attacker.IsAI)
-            {
-                _pending.AttackerRoll.TrySetResult(_pending.AttackerDiceCount);
-                await hub.Clients.Group(gameCode).SendAsync("SpawnDice", new SpawnDice("attacker", _pending.AttackerDiceCount, _pending.SourceId, _pending.TargetId));
-            }
-        }
-    }
+    // AutoRollBotOpponent removed — sequential flow handles bot dice in AttackWithDice directly
 
     public (GameState State, CombatResult Result) ResolveCombat(string connectionId, int sourceId, int targetId, int[] attackerDice, int[] defenderDice)
     {

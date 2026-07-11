@@ -47,5 +47,6 @@ public record SpawnDice(
     string Role,        // "attacker" or "defender"
     int DiceCount,
     int SourceId,
-    int TargetId
+    int TargetId,
+    int PlayerIndex     // which player index owns this roll — TV uses this to self-determine ownership
 );

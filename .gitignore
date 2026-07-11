@@ -8,6 +8,7 @@ server/**/obj/
 # Training data & models (generated, not source)
 server/Risk.Server/Data/logs/
 server/Risk.Server/Data/models/*.zip
+server/Risk.Server/Data/risk-models/*.zip
 
 # Vite build output (regenerated on deploy)
 server/Risk.Server/wwwroot/assets/

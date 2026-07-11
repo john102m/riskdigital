@@ -63,6 +63,7 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
           <ul className="space-y-1.5">
             {gameState.players.map((p, i) => (
               <li key={p.name} className="flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2">
+                <span className="text-xs text-gray-500 font-mono w-4">{i}</span>
                 <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
                 <span className="font-medium">{p.name}</span>
                 {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
