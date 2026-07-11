@@ -29,7 +29,10 @@ public class DiceAuditLogger
             lock (_lock)
             {
                 if (!File.Exists(_logPath))
+                {
                     File.WriteAllText(_logPath, "Timestamp,Source,Role,Value\n");
+                }
+
                 File.AppendAllText(_logPath, $"{DateTime.UtcNow:o},{source},{role},{value}\n");
             }
         }

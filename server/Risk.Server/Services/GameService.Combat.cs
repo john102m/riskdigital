@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging;
 using Risk.Server.Hubs;
 using Risk.Server.Models;
 

@@ -16,6 +16,34 @@ public enum TurnPhase
     Attack,
     Fortify
 }
+public enum CardType
+{
+    Infantry,
+    Cavalry,
+    Artillery,
+    Wild
+}
+
+public enum AiPersonality
+{
+    Opportunist,
+    Cautious,
+    Aggressive,
+    Continental
+}
+
+public enum PlacementMode
+{
+    Auto,
+    FreeForAll,
+    Manual
+}
+public enum MissionType
+{
+    ContinentConquest,
+    TerritoryCount,
+    Elimination
+}
 
 public class GameState
 {
@@ -37,7 +65,6 @@ public class GameState
     public HouseRules HouseRules { get; set; } = new();
 }
 
-public enum PlacementMode { Auto, FreeForAll, Manual }
 
 public class HouseRules
 {
@@ -47,7 +74,6 @@ public class HouseRules
     public PlacementMode PlacementMode { get; set; } = PlacementMode.Auto;
 }
 
-public enum MissionType { ContinentConquest, TerritoryCount, Elimination }
 
 public class Mission
 {
@@ -80,7 +106,22 @@ public class Player
     public Mission? Mission { get; set; }
 }
 
-public enum AiPersonality { Opportunist, Cautious, Aggressive, Continental }
+public class Territory
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Continent { get; set; } = "";
+    public int OwnerId { get; set; } = -1;
+    public int Armies { get; set; }
+    public List<int> Adjacent { get; set; } = [];
+}
+
+public class Card
+{
+    public int? TerritoryId { get; set; }
+    public CardType Type { get; set; }
+}
+
 
 public record PersonalityWeights(
     float AttackRatioThreshold,
@@ -103,26 +144,4 @@ public record PersonalityWeights(
     };
 }
 
-public class Territory
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public string Continent { get; set; } = "";
-    public int OwnerId { get; set; } = -1;
-    public int Armies { get; set; }
-    public List<int> Adjacent { get; set; } = [];
-}
 
-public class Card
-{
-    public int? TerritoryId { get; set; }
-    public CardType Type { get; set; }
-}
-
-public enum CardType
-{
-    Infantry,
-    Cavalry,
-    Artillery,
-    Wild
-}
