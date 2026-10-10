@@ -16,7 +16,7 @@ public static class ManagementEndpoints
         app.MapGet("/guide", (IWebHostEnvironment env) =>
             Results.File(Path.Combine(env.WebRootPath, "guide.html"), "text/html"));
 
-        var admin = app.MapGroup("/admin");
+        var admin = app.MapGroup("/admin").AddEndpointFilter<AdminAuthFilter>();
 
         admin.MapGet("/games", (GameManager manager) =>
         {

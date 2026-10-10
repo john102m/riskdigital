@@ -5,6 +5,9 @@ server/**/obj/
 *.suo
 .vs/
 
+# Secrets — environment-specific config, never commit
+server/Risk.Server/appsettings.Production.json
+
 # Training data & models (generated, not source)
 server/Risk.Server/Data/logs/
 server/Risk.Server/Data/models/*.zip
