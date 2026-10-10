@@ -14,7 +14,7 @@ interface Props {
 
 export function LobbyScreen({ connection, gameState, playerName, showToast }: Props) {
   const isHost = gameState.players.find((p) => p.name === playerName)?.isHost;
-  const [showT5, setShowT5] = useState(false);
+  const [showMl, setShowMl] = useState(false);
 
   // Smart default: all bots → Auto, any humans → Free
   const allBots = gameState.players.filter(p => !p.isHost).every(p => p.isAI);
@@ -36,7 +36,7 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
   const addAI = async (tier: number, personality?: string) => {
     try {
       await connection.invoke("AddAI", tier, personality ?? null);
-      setShowT5(false);
+      setShowMl(false);
     } catch (e: any) {
       showToast(e.message);
     }
@@ -67,7 +67,7 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
                 <img src={`${SERVER}/avatars/${AVATARS[p.avatarIndex] || "female-1"}.png`} alt="" className="h-8 w-8 rounded-full shrink-0 border-2" style={{ borderColor: p.colour }} />
                 <span className="font-medium">{p.name}</span>
                 {p.isHost && <span className="ml-auto text-xs text-gray-500 uppercase">Host</span>}
-                {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">🤖 T{p.aiTier}</span>}
+                {p.isAI && !isHost && <span className="ml-auto text-xs text-gray-500">{p.aiTier >= 5 ? '🧠' : '🤖'}</span>}
                 {p.isAI && isHost && (
                   <button onClick={() => removeAI(i)} className="ml-auto text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-red-900/30">✕</button>
                 )}
@@ -94,27 +94,18 @@ export function LobbyScreen({ connection, gameState, playerName, showToast }: Pr
             )}
           </div>
 
-          {/* AI tier buttons */}
+          {/* AI buttons */}
           {isHost && gameState.players.length < 6 && (
             <div className="flex flex-col gap-2 mt-3">
               <div className="flex gap-2">
                 <button onClick={() => addAI(1)} className="flex-1 bg-blue-600 active:bg-blue-700 px-3 py-2 rounded-lg font-bold text-sm">
-                  🤖 T1
+                  🤖 Easy
                 </button>
-                <button onClick={() => addAI(2)} className="flex-1 bg-purple-600 active:bg-purple-700 px-3 py-2 rounded-lg font-bold text-sm">
-                  ⚔️ T2
-                </button>
-                <button onClick={() => addAI(3)} className="flex-1 bg-green-600 active:bg-green-700 px-3 py-2 rounded-lg font-bold text-sm">
-                  🧠 T3
-                </button>
-                <button onClick={() => addAI(4)} className="flex-1 bg-amber-600 active:bg-amber-700 px-3 py-2 rounded-lg font-bold text-sm">
-                  🦊 T4
-                </button>
-                <button onClick={() => setShowT5(!showT5)} className="flex-1 bg-rose-600 active:bg-rose-700 px-3 py-2 rounded-lg font-bold text-sm">
-                  🧬 T5
+                <button onClick={() => setShowMl(!showMl)} className="flex-1 bg-rose-600 active:bg-rose-700 px-3 py-2 rounded-lg font-bold text-sm">
+                  🧠 ML
                 </button>
               </div>
-              {showT5 && (
+              {showMl && (
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => addAI(5, "Opportunist")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🦊 Opportunist</button>
                   <button onClick={() => addAI(5, "Cautious")} className="bg-rose-700 active:bg-rose-800 px-3 py-2 rounded-lg text-xs font-bold">🛡️ Cautious</button>
