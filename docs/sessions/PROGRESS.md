@@ -1326,3 +1326,117 @@ Major session: rebuilt popup system from code-generated to scene-designed, added
 ---
 
 *Updated: 2026-07-05 23:50*
+
+---
+
+## 2026-07-11 — Merged to Main
+
+### Both repos merged `feat/simultaneous-arena-sweep` → `main`
+
+**RiskDigital** (server + handset):
+- Multi-game server (GameManager, concurrent games via SignalR groups)
+- Sequential dice flow rewrite (AttackWithDice)
+- Active/static dice split on Unity
+- Single-household fix (removed redundant broadcasts, Inspector value persistence)
+- EarlySettleAttacker (defender TV sees correct red faces)
+- Same-household human defender RollPrompt fix
+- Simultaneous arena sweep (all TVs roll together, ghost dice snap to authoritative values)
+- All 4 cross-household test scenarios passing
+- CombatTheatre role enum + ResetCombat + combatCts cancellation
+
+**UnityDigitalRisk** (Unity TV board):
+- All of the above on the client side
+- GameJoinScreen (runtime game selection UI)
+- Household picker text input
+- Ghost dice physics + snap-to-result
+- EarlySettleAttacker async method
+- Blitz camera flypath fix (no more dual Fly() conflict)
+
+### Also this session:
+- Created `docs/proposals/GAMEPLAY-OBSERVATIONS.md` — running list of gameplay niggles
+- Created `docs/ai/AI-TIER5-NEXT.md` — incremental AI improvement plan (5 phases)
+- Downloaded WHUK training data (`risk-logs.zip`) — 50 real games, 1,594 attack decisions
+- Extracted to `risk-logs-whuk/` for analysis
+
+---
+
+*Updated: 2026-07-11 22:19*
+
+
+---
+
+## 2026-07-12 — AiService Refactoring, CV, Elite-Lite Design
+
+### Completed
+
+**AiService Refactoring (branch: active)**
+- Consolidated Tiers 1–4 into single "Easy" bot, kept Tier 5 as "ML" bot
+- Extracted strategy pattern: `IAiStrategy` interface with 8 methods
+- Created `AiActions.cs` — stateless shared execution (blitz, single attack, fortify, broadcast, delays)
+- Created `AiEasyStrategy.cs` — strongest source → weakest target, blitz at 5+, stop after 4–6 attacks, reinforce front-line, fortify inland → front, trade at 4+ cards
+- Created `AiMlStrategy.cs` — personality-weighted scoring, ML predictions, continent denial, elimination hunting, mission pursuit, Tier 5 human-behaviour blend
+- Rewrote `AiService.cs` as thin entry point (~180 lines) — TriggerIfAi → GetStrategy → shared RunReinforce/RunAttack/RunFortify loops
+- Simplified lobby: 5 tier buttons → 2 (Easy + ML with personality picker)
+- TypeScript compiles clean (`npx tsc --noEmit` passes)
+- Total: 997 lines in 1 file → ~525 lines across 5 files. Duplication eliminated.
+
+**Proposal Docs**
+- `docs/proposals/PROPOSAL-AI-REFACTOR-V2.md` — full updated proposal with tier consolidation, Easy bot spec, strategy comparison table
+
+**Career / Portfolio Work**
+- `docs/SCALABILITY-TUTORIAL.md` — tutorial mapping "scalable" concepts to own projects (ProjectAlpha + Risk Digital)
+- `docs/CV-DRAFT.md` — tightened CV with Surveyor as headline, skills table, trimmed projects
+
+**Elite-Lite Game Design**
+- Created `D:\Development\EliteLite\` project folder
+- `D:\Development\EliteLite\docs\DESIGN.md` — full game design document:
+  - Classic Elite trade loop (dock → buy → jump → sell → upgrade)
+  - 20–30 star systems with economy types driving prices
+  - Real-time third-person dogfighting (cockpit toggle later)
+  - Low-poly art direction (Kenney Space Kit as starter assets)
+  - Ship upgrades (cargo, engine, weapons, shields, hull, scanner)
+  - Progression via Elite rating (kills + credits)
+  - 5 development phases with clear milestones
+  - Data-driven design (JSON configs for systems, commodities, ships)
+  - Unity 6 LTS, URP, Cinemachine, Input System
+- Downloaded Kenney Space Kit to `D:\Development\EliteLite\kenney_space-kit\`
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `server/Risk.Server/Services/IAiStrategy.cs` | Strategy interface |
+| `server/Risk.Server/Services/AiActions.cs` | Shared execution class |
+| `server/Risk.Server/Services/AiEasyStrategy.cs` | Easy bot (consolidated tiers 1–4) |
+| `server/Risk.Server/Services/AiMlStrategy.cs` | ML bot (tier 5 + personality) |
+| `docs/proposals/PROPOSAL-AI-REFACTOR-V2.md` | Updated refactoring proposal |
+| `docs/SCALABILITY-TUTORIAL.md` | Scalability concepts tutorial |
+| `docs/CV-DRAFT.md` | Tightened CV draft |
+| `D:\Development\EliteLite\docs\DESIGN.md` | Elite-Lite game design doc |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `server/Risk.Server/Services/AiService.cs` | Complete rewrite — thin entry point with shared loops |
+| `handset/src/components/LobbyScreen.tsx` | 5 tier buttons → 2 (Easy + ML), renamed state to showMl |
+
+### Design Decisions
+
+- Tiers 1–4 never used in real gameplay → consolidated into one "Easy" strategy
+- Easy bot cherry-picks best of old tiers: Tier 2's attack/fortify logic + Tier 3's card timing
+- ML bot retains all Tier 4/5 logic (personality weights, mission pursuit, elimination hunting, Tier 5 blend)
+- `AddAI` hub signature unchanged — tiers < 5 route to Easy, tier 5 routes to ML
+- `AiActions` is stateless — receives `timingMultiplier` as parameter, not strategy reference
+- Placement logic stays in `AiService.cs` (too simple to justify strategy routing)
+- Error recovery stays in `AiService.cs` (infrastructure, not strategy)
+
+### Next
+
+- Build server in VS2026 — verify C# compiles
+- Playtest: Easy bot + ML bot in same game, confirm both complete turns correctly
+- Elite-Lite: set up Unity project when the itch calls
+
+---
+
+*Updated: 2026-07-12*
